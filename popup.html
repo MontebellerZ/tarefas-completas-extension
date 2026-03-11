@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Azure Query Metrics</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Azure Query Metrics</h1>
+
+      <label for="days">Dias concluidos</label>
+      <input id="days" type="number" min="1" value="6" />
+
+      <button id="runButton" type="button">Consultar API e calcular</button>
+
+      <section id="result" class="result" aria-live="polite">
+        Clique no botao para calcular.
+      </section>
+    </main>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
