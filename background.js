@@ -1,4 +1,7 @@
 let cachedAzureUrl;
+let cachedWorkItems = null;
+let cachedWorkItemsAt = 0;
+const WORK_ITEMS_CACHE_TTL_MS = 60000;
 
 async function loadAzureUrlFromEnv() {
   if (cachedAzureUrl) {
@@ -126,7 +129,7 @@ async function fetchCompletedWorkValues(ctx, ids) {
   for (const chunk of idChunks) {
     const payload = {
       ids: chunk,
-      fields: ["Microsoft.VSTS.Scheduling.CompletedWork"],
+      fields: ["Microsoft.VSTS.Scheduling.CompletedWork", "System.IterationPath"],
       errorPolicy: "Omit",
     };
 
@@ -139,18 +142,35 @@ async function fetchCompletedWorkValues(ctx, ids) {
     });
 
     for (const item of result.value || []) {
-      const raw = item.fields?.["Microsoft.VSTS.Scheduling.CompletedWork"];
-      const value = Number(raw);
-      if (Number.isFinite(value)) {
-        values.push(value);
+      const rawCompletedWork = item.fields?.["Microsoft.VSTS.Scheduling.CompletedWork"];
+      const completedWork = Number(rawCompletedWork);
+      if (!Number.isFinite(completedWork)) {
+        continue;
       }
+
+      const iterationPath = String(item.fields?.["System.IterationPath"] || "").trim();
+      values.push({ completedWork, iterationPath });
     }
   }
 
   return values;
 }
 
-async function collectMetricsFromApi(days) {
+function sortIterationPaths(iterationPaths) {
+  return [...iterationPaths].sort((a, b) =>
+    b.localeCompare(a, "pt-BR", {
+      numeric: true,
+      sensitivity: "base",
+    }),
+  );
+}
+
+async function loadWorkItemsFromApi(forceRefresh = false) {
+  const now = Date.now();
+  if (!forceRefresh && cachedWorkItems && now - cachedWorkItemsAt < WORK_ITEMS_CACHE_TTL_MS) {
+    return cachedWorkItems;
+  }
+
   const azureUrl = await loadAzureUrlFromEnv();
   const ctx = parseAzureQueryUrl(azureUrl);
 
@@ -162,7 +182,34 @@ async function collectMetricsFromApi(days) {
   }
 
   const ids = await runWiqlQuery(ctx, wiql);
-  const completedWorkValues = await fetchCompletedWorkValues(ctx, ids);
+  const workItems = await fetchCompletedWorkValues(ctx, ids);
+
+  cachedWorkItems = workItems;
+  cachedWorkItemsAt = now;
+
+  return workItems;
+}
+
+function buildSprintOptions(workItems) {
+  const unique = new Set();
+  for (const item of workItems) {
+    if (item.iterationPath) {
+      unique.add(item.iterationPath);
+    }
+  }
+
+  return sortIterationPaths(unique);
+}
+
+async function collectMetricsFromApi(days, selectedSprint) {
+  const workItems = await loadWorkItemsFromApi();
+  const sprint = String(selectedSprint || "").trim();
+
+  const filteredItems = sprint
+    ? workItems.filter((item) => item.iterationPath === sprint)
+    : workItems;
+
+  const completedWorkValues = filteredItems.map((item) => item.completedWork);
 
   const sum = completedWorkValues.reduce((acc, value) => acc + value, 0);
   const dailyAverage = days > 0 ? sum / days : 0;
@@ -172,18 +219,27 @@ async function collectMetricsFromApi(days) {
     sumHours: Number(sum.toFixed(4)),
     completedDays: days,
     dailyAverage: Number(dailyAverage.toFixed(4)),
+    selectedSprint: sprint,
   };
 }
 
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.action !== "openAzureAndCollect") {
+  if (message?.action !== "openAzureAndCollect" && message?.action !== "listSprints") {
     return;
   }
 
   (async () => {
     try {
-      const days = Number.isFinite(Number(message.days)) ? Number(message.days) : 6;
-      const metrics = await collectMetricsFromApi(days);
+      if (message.action === "listSprints") {
+        const workItems = await loadWorkItemsFromApi(true);
+        const sprints = buildSprintOptions(workItems);
+        sendResponse({ ok: true, sprints, defaultSprint: sprints[0] || "" });
+        return;
+      }
+
+      const days = Number.isFinite(Number(message.days)) ? Number(message.days) : 15;
+      const sprint = String(message.sprint || "").trim();
+      const metrics = await collectMetricsFromApi(days, sprint);
 
       sendResponse({ ok: true, metrics });
     } catch (error) {
