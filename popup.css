@@ -329,10 +329,6 @@ button:disabled {
   padding: 2px 8px;
 }
 
-.tag-chip.empty {
-  background: #605e5c;
-}
-
 .type-bug .item-id-chip {
   background: var(--bug);
   color: #fff;
