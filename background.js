@@ -1,11 +1,11 @@
-let cachedAzureUrl;
+let cachedEnv;
 let cachedWorkItems = null;
 let cachedWorkItemsAt = 0;
 const WORK_ITEMS_CACHE_TTL_MS = 60000;
 
-async function loadAzureUrlFromEnv() {
-  if (cachedAzureUrl) {
-    return cachedAzureUrl;
+async function loadEnvVars() {
+  if (cachedEnv) {
+    return cachedEnv;
   }
 
   const envUrl = chrome.runtime.getURL(".env");
@@ -35,13 +35,17 @@ async function loadAzureUrlFromEnv() {
     env[key] = value;
   }
 
-  const azureUrl = env.AZURE_QUERY_URL;
-  if (!azureUrl) {
-    throw new Error("Defina AZURE_QUERY_URL no arquivo .env.");
-  }
+  cachedEnv = env;
+  return env;
+}
 
-  cachedAzureUrl = azureUrl;
-  return azureUrl;
+async function loadQueryUrlFromEnv(key) {
+  const env = await loadEnvVars();
+  const url = String(env[key] || "").trim();
+  if (!url) {
+    throw new Error(`Defina ${key} no arquivo .env.`);
+  }
+  return url;
 }
 
 function parseAzureQueryUrl(azureUrl) {
@@ -58,6 +62,25 @@ function parseAzureQueryUrl(azureUrl) {
     project: parts[1],
     queryId: parts[4],
   };
+}
+
+function formatIterationPath(iterationPath, fallbackProject = "") {
+  const path = String(iterationPath || "").trim();
+  if (!path) {
+    return fallbackProject || "Sem sprint";
+  }
+
+  const sprintMatch = path.match(/Sprint\s*(\d+)/i);
+  if (sprintMatch) {
+    return `Sprint ${sprintMatch[1]}`;
+  }
+
+  const parts = path.split("\\").filter(Boolean);
+  if (!parts.length) {
+    return fallbackProject || "Sem sprint";
+  }
+
+  return parts[0];
 }
 
 async function azureFetchJson(url, options = {}) {
@@ -114,7 +137,7 @@ function chunkIds(ids, size) {
   return chunks;
 }
 
-async function fetchCompletedWorkValues(ctx, ids) {
+async function fetchWorkItemsBatch(ctx, ids, fields) {
   if (!ids.length) {
     return [];
   }
@@ -129,7 +152,7 @@ async function fetchCompletedWorkValues(ctx, ids) {
   for (const chunk of idChunks) {
     const payload = {
       ids: chunk,
-      fields: ["Microsoft.VSTS.Scheduling.CompletedWork", "System.IterationPath"],
+      fields,
       errorPolicy: "Omit",
     };
 
@@ -141,28 +164,36 @@ async function fetchCompletedWorkValues(ctx, ids) {
       body: JSON.stringify(payload),
     });
 
-    for (const item of result.value || []) {
-      const rawCompletedWork = item.fields?.["Microsoft.VSTS.Scheduling.CompletedWork"];
-      const completedWork = Number(rawCompletedWork);
-      if (!Number.isFinite(completedWork)) {
-        continue;
-      }
-
-      const iterationPath = String(item.fields?.["System.IterationPath"] || "").trim();
-      values.push({ completedWork, iterationPath });
-    }
+    values.push(...(result.value || []));
   }
 
   return values;
 }
 
-function sortIterationPaths(iterationPaths) {
-  return [...iterationPaths].sort((a, b) =>
-    b.localeCompare(a, "pt-BR", {
-      numeric: true,
-      sensitivity: "base",
-    }),
-  );
+function getSprintNumber(label) {
+  const match = String(label || "").match(/Sprint\s*(\d+)/i);
+  return match ? Number(match[1]) : null;
+}
+
+function sortSprintOptions(options) {
+  return [...options].sort((a, b) => {
+    const aNum = getSprintNumber(a.label);
+    const bNum = getSprintNumber(b.label);
+
+    if (aNum != null && bNum != null) {
+      return bNum - aNum;
+    }
+
+    if (aNum != null) {
+      return -1;
+    }
+
+    if (bNum != null) {
+      return 1;
+    }
+
+    return a.label.localeCompare(b.label, "pt-BR", { sensitivity: "base" });
+  });
 }
 
 async function loadWorkItemsFromApi(forceRefresh = false) {
@@ -171,7 +202,7 @@ async function loadWorkItemsFromApi(forceRefresh = false) {
     return cachedWorkItems;
   }
 
-  const azureUrl = await loadAzureUrlFromEnv();
+  const azureUrl = await loadQueryUrlFromEnv("AZURE_QUERY_URL");
   const ctx = parseAzureQueryUrl(azureUrl);
 
   const queryDefinition = await loadQueryDefinition(ctx);
@@ -182,7 +213,26 @@ async function loadWorkItemsFromApi(forceRefresh = false) {
   }
 
   const ids = await runWiqlQuery(ctx, wiql);
-  const workItems = await fetchCompletedWorkValues(ctx, ids);
+  const batchItems = await fetchWorkItemsBatch(ctx, ids, [
+    "Microsoft.VSTS.Scheduling.CompletedWork",
+    "System.IterationPath",
+  ]);
+
+  const workItems = batchItems
+    .map((item) => {
+      const completedWork = Number(item.fields?.["Microsoft.VSTS.Scheduling.CompletedWork"]);
+      if (!Number.isFinite(completedWork)) {
+        return null;
+      }
+
+      const iterationPath = String(item.fields?.["System.IterationPath"] || "").trim();
+      return {
+        completedWork,
+        iterationPath,
+        iterationLabel: formatIterationPath(iterationPath, ctx.project),
+      };
+    })
+    .filter(Boolean);
 
   cachedWorkItems = workItems;
   cachedWorkItemsAt = now;
@@ -191,14 +241,15 @@ async function loadWorkItemsFromApi(forceRefresh = false) {
 }
 
 function buildSprintOptions(workItems) {
-  const unique = new Set();
+  const unique = new Map();
   for (const item of workItems) {
     if (item.iterationPath) {
-      unique.add(item.iterationPath);
+      unique.set(item.iterationPath, item.iterationLabel);
     }
   }
 
-  return sortIterationPaths(unique);
+  const options = Array.from(unique.entries()).map(([value, label]) => ({ value, label }));
+  return sortSprintOptions(options);
 }
 
 async function collectMetricsFromApi(days, selectedSprint) {
@@ -220,11 +271,80 @@ async function collectMetricsFromApi(days, selectedSprint) {
     completedDays: days,
     dailyAverage: Number(dailyAverage.toFixed(4)),
     selectedSprint: sprint,
+    selectedSprintLabel:
+      filteredItems[0]?.iterationLabel || (sprint ? formatIterationPath(sprint) : "Todas as sprints"),
   };
 }
 
+function splitTags(tags) {
+  if (!tags) {
+    return [];
+  }
+
+  return String(tags)
+    .split(";")
+    .map((tag) => tag.trim())
+    .filter(Boolean);
+}
+
+async function loadRecentChangesFromApi() {
+  const queryUrl = await loadQueryUrlFromEnv("AZURE_CHANGED_QUERY_URL");
+  const ctx = parseAzureQueryUrl(queryUrl);
+  const queryDefinition = await loadQueryDefinition(ctx);
+  const wiql = queryDefinition.wiql;
+
+  if (!wiql) {
+    throw new Error("A query de alterados nao retornou WIQL.");
+  }
+
+  const ids = await runWiqlQuery(ctx, wiql);
+  const batchItems = await fetchWorkItemsBatch(ctx, ids, [
+    "System.Title",
+    "System.WorkItemType",
+    "Microsoft.VSTS.Scheduling.OriginalEstimate",
+    "Microsoft.VSTS.Scheduling.CompletedWork",
+    "System.State",
+    "System.Tags",
+    "System.IterationPath",
+    "System.Description",
+    "System.ChangedDate",
+  ]);
+
+  const items = batchItems.map((item) => {
+    const title = String(item.fields?.["System.Title"] || "").trim();
+    const type = String(item.fields?.["System.WorkItemType"] || "").trim();
+    const estimated = Number(item.fields?.["Microsoft.VSTS.Scheduling.OriginalEstimate"]);
+    const completed = Number(item.fields?.["Microsoft.VSTS.Scheduling.CompletedWork"]);
+    const state = String(item.fields?.["System.State"] || "").trim();
+    const tags = splitTags(item.fields?.["System.Tags"]);
+    const iterationPath = String(item.fields?.["System.IterationPath"] || "").trim();
+    const description = String(item.fields?.["System.Description"] || "").trim();
+    const changedDate = String(item.fields?.["System.ChangedDate"] || "");
+
+    return {
+      id: item.id,
+      title,
+      type,
+      estimated: Number.isFinite(estimated) ? Number(estimated.toFixed(4)) : 0,
+      completed: Number.isFinite(completed) ? Number(completed.toFixed(4)) : 0,
+      state,
+      tags,
+      sprint: formatIterationPath(iterationPath, ctx.project),
+      description,
+      changedDate,
+    };
+  });
+
+  items.sort((a, b) => String(b.changedDate).localeCompare(String(a.changedDate)));
+  return items;
+}
+
 chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
-  if (message?.action !== "openAzureAndCollect" && message?.action !== "listSprints") {
+  if (
+    message?.action !== "openAzureAndCollect" &&
+    message?.action !== "listSprints" &&
+    message?.action !== "listRecentChanges"
+  ) {
     return;
   }
 
@@ -233,7 +353,13 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
       if (message.action === "listSprints") {
         const workItems = await loadWorkItemsFromApi(true);
         const sprints = buildSprintOptions(workItems);
-        sendResponse({ ok: true, sprints, defaultSprint: sprints[0] || "" });
+        sendResponse({ ok: true, sprints, defaultSprint: sprints[0]?.value || "" });
+        return;
+      }
+
+      if (message.action === "listRecentChanges") {
+        const items = await loadRecentChangesFromApi();
+        sendResponse({ ok: true, items });
         return;
       }
 

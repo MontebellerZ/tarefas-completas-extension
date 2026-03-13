@@ -17,9 +17,21 @@
       <input id="days" type="number" min="1" value="15" />
 
       <button id="runButton" type="button">Consultar API e calcular</button>
+      <button id="recentButton" type="button">Buscar itens alterados (24h)</button>
 
       <section id="result" class="result" aria-live="polite">
         Clique no botao para calcular.
+      </section>
+
+      <section id="recentSection" class="recent-section">
+        <h2>Itens alterados</h2>
+        <div id="recentList" class="recent-list">Nenhum item carregado.</div>
+      </section>
+
+      <section id="detailSection" class="detail-section hidden">
+        <h2>Detalhes</h2>
+        <div id="detailMeta" class="detail-meta"></div>
+        <div id="detailDescription" class="detail-description"></div>
       </section>
     </main>
 

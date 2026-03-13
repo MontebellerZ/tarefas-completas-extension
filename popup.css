@@ -10,7 +10,7 @@ body {
 }
 
 .container {
-  width: 320px;
+  width: 420px;
   padding: 14px;
   display: flex;
   flex-direction: column;
@@ -61,4 +61,77 @@ button:disabled {
   padding: 10px;
   white-space: pre-line;
   font-size: 13px;
+}
+
+.recent-section,
+.detail-section {
+  border-radius: 8px;
+  background: #fff;
+  border: 1px solid #d9e1ee;
+  padding: 10px;
+}
+
+.recent-section h2,
+.detail-section h2 {
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.recent-list {
+  max-height: 220px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 12px;
+}
+
+.recent-item {
+  border: 1px solid #d9e1ee;
+  background: #f9fbff;
+  border-radius: 8px;
+  text-align: left;
+  padding: 8px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.recent-item:hover {
+  background: #eef5ff;
+}
+
+.recent-item-title {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d3557;
+}
+
+.recent-item-meta {
+  font-size: 11px;
+  color: #324763;
+}
+
+.detail-meta {
+  white-space: pre-line;
+  font-size: 12px;
+  color: #1f2937;
+}
+
+.detail-description {
+  margin-top: 8px;
+  white-space: pre-wrap;
+  max-height: 180px;
+  overflow: auto;
+  font-size: 12px;
+  color: #1f2937;
+  background: #f8fafc;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  padding: 8px;
+}
+
+.hidden {
+  display: none;
 }
