@@ -14,6 +14,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		"clearUserData",
 		"listProjects",
 		"listTeams",
+		"listUsers",
 		"listSprints",
 		"openAzureAndCollect",
 		"listRecentChanges",
@@ -40,6 +41,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					break;
 				case "listTeams":
 					sendResponse({ ok: true, ...(await listTeams(message.organization, message.projectId, message.tokenValue)) });
+					break;
+				case "listUsers":
+					sendResponse({ ok: true, ...(await listUsers(message.organization, message.projectId, message.teamId, message.tokenValue)) });
 					break;
 				case "listSprints":
 					sendResponse({ ok: true, ...(await listSprints()) });

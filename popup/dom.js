@@ -14,6 +14,7 @@ window.PopupDom = {
 	organizationInput: document.getElementById("organizationInput"),
 	projectSelect: document.getElementById("projectSelect"),
 	teamSelect: document.getElementById("teamSelect"),
+	userSelect: document.getElementById("userSelect"),
 	settingsStatus: document.getElementById("settingsStatus"),
 	result: document.getElementById("result"),
 	sprintSelect: document.getElementById("sprintSelect"),

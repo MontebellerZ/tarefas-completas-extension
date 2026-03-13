@@ -51,5 +51,5 @@ function ensureRequiredSettings(settings) {
 }
 
 function contextCacheKey(settings) {
-	return `${settings.organization}|${settings.projectId}|${settings.teamId}`;
+	return `${settings.organization}|${settings.projectId}|${settings.teamId}|${settings.selectedUserId || settings.selectedUserUniqueName || "me"}`;
 }

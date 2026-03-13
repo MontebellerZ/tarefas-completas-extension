@@ -19,7 +19,10 @@ async function listRecentChanges() {
 	}
 
 	const sinceDateKey = relevantDateKeys[0];
-	const candidateIds = await runWiql(dataset.settings, buildRecentChangesWiql(dataset.settings.projectName, sinceDateKey));
+	const candidateIds = await runWiql(
+		dataset.settings,
+		buildRecentChangesWiql(dataset.settings.projectName, sinceDateKey, dataset.targetUser),
+	);
 	if (!candidateIds.length) {
 		cache.recentChanges = { data: [], at: Date.now(), key: ctxKey };
 		return [];

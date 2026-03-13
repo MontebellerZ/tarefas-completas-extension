@@ -20,6 +20,8 @@ window.PopupApi = {
 		sendRuntimeMessage({ action: "listProjects", organization, tokenValue }),
 	listTeams: (organization, projectId, tokenValue) =>
 		sendRuntimeMessage({ action: "listTeams", organization, projectId, tokenValue }),
+	listUsers: (organization, projectId, teamId, tokenValue) =>
+		sendRuntimeMessage({ action: "listUsers", organization, projectId, teamId, tokenValue }),
 	listSprints: () => sendRuntimeMessage({ action: "listSprints" }),
 	collectMetrics: (sprintId, includeCurrentDay) =>
 		sendRuntimeMessage({ action: "openAzureAndCollect", sprintId, includeCurrentDay }),

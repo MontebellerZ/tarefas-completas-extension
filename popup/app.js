@@ -101,13 +101,15 @@ async function loadSavedSettings() {
 	return response;
 }
 
-async function loadProjects(selectedProjectId = "", selectedTeamId = "") {
+async function loadProjects(selectedProjectId = "", selectedTeamId = "", selectedUserId = "") {
 	const organization = PopupDom.organizationInput.value.trim();
 	const tokenValue = PopupDom.tokenValueInput.value.trim();
 
 	if (!organization || !tokenValue) {
 		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
+		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+		PopupState.availableUsers = [];
 		return;
 	}
 
@@ -118,18 +120,22 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "") {
 	PopupRender.populateSelect(PopupDom.projectSelect, response.projects || [], "Selecione um projeto", selectedProjectId);
 
 	if (selectedProjectId) {
-		await loadTeams(selectedProjectId, selectedTeamId);
+		await loadTeams(selectedProjectId, selectedTeamId, selectedUserId);
 	} else {
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
+		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+		PopupState.availableUsers = [];
 	}
 }
 
-async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamId = "") {
+async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamId = "", selectedUserId = "") {
 	const organization = PopupDom.organizationInput.value.trim();
 	const tokenValue = PopupDom.tokenValueInput.value.trim();
 
 	if (!organization || !tokenValue || !projectId) {
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
+		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+		PopupState.availableUsers = [];
 		return;
 	}
 
@@ -137,6 +143,30 @@ async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamI
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar times.");
 
 	PopupRender.populateSelect(PopupDom.teamSelect, response.teams || [], "Selecione um time", selectedTeamId);
+
+	if (selectedTeamId) {
+		await loadUsers(projectId, selectedTeamId, selectedUserId);
+	} else {
+		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+		PopupState.availableUsers = [];
+	}
+}
+
+async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = PopupDom.teamSelect.value, selectedUserId = "") {
+	const organization = PopupDom.organizationInput.value.trim();
+	const tokenValue = PopupDom.tokenValueInput.value.trim();
+
+	if (!organization || !tokenValue || !projectId || !teamId) {
+		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+		PopupState.availableUsers = [];
+		return;
+	}
+
+	const response = await PopupApi.listUsers(organization, projectId, teamId, tokenValue);
+	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar usuarios.");
+
+	PopupState.availableUsers = response.users || [];
+	PopupRender.populateSelect(PopupDom.userSelect, PopupState.availableUsers, "Eu mesmo", selectedUserId || "");
 }
 
 async function saveSettings() {
@@ -145,8 +175,10 @@ async function saveSettings() {
 	const organization = PopupDom.organizationInput.value.trim();
 	const projectId = PopupDom.projectSelect.value;
 	const teamId = PopupDom.teamSelect.value;
+	const selectedUserId = PopupDom.userSelect.value;
 	const projectName = PopupDom.projectSelect.options[PopupDom.projectSelect.selectedIndex]?.text || "";
 	const teamName = PopupDom.teamSelect.options[PopupDom.teamSelect.selectedIndex]?.text || "";
+	const selectedUser = PopupState.availableUsers.find((user) => String(user.value) === String(selectedUserId));
 
 	const response = await PopupApi.saveSettings({
 		tokenName,
@@ -156,6 +188,10 @@ async function saveSettings() {
 		projectName,
 		teamId,
 		teamName,
+		selectedUserId: selectedUser?.id || selectedUserId || "",
+		selectedUserName: selectedUser?.name || "",
+		selectedUserUniqueName: selectedUser?.uniqueName || "",
+		selectedUserDescriptor: selectedUser?.descriptor || "",
 	});
 
 	if (!response?.ok) throw new Error(response?.error || "Falha ao salvar configuracoes.");
@@ -197,9 +233,12 @@ async function initializeSettingsView(savedSettings) {
 	PopupRender.applySettingsToInputs(savedSettings);
 	PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 	PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
+	const selectedUserValue = savedSettings.selectedUserId || savedSettings.selectedUserDescriptor || savedSettings.selectedUserUniqueName || "";
+	PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", selectedUserValue);
+	PopupState.availableUsers = [];
 
 	if (savedSettings.organization && savedSettings.tokenValue) {
-		await loadProjects(savedSettings.projectId || "", savedSettings.teamId || "");
+		await loadProjects(savedSettings.projectId || "", savedSettings.teamId || "", selectedUserValue);
 	}
 }
 
@@ -223,6 +262,10 @@ function bindEvents() {
 
 	PopupDom.projectSelect.addEventListener("change", async () => {
 		await runSettingsAction(() => loadTeams(), "Falha ao carregar times.");
+	});
+
+	PopupDom.teamSelect.addEventListener("change", async () => {
+		await runSettingsAction(() => loadUsers(), "Falha ao carregar usuarios.");
 	});
 
 	PopupDom.runButton.addEventListener("click", () => {

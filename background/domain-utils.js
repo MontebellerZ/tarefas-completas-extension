@@ -33,6 +33,25 @@ function matchesIdentity(left, right) {
 	return false;
 }
 
+function resolveTargetUser(settings, currentUser) {
+	if (!settings.selectedUserId && !settings.selectedUserUniqueName && !settings.selectedUserName && !settings.selectedUserDescriptor) {
+		return { ...currentUser, isMe: true };
+	}
+
+	return {
+		id: settings.selectedUserId,
+		descriptor: settings.selectedUserDescriptor,
+		uniqueName: settings.selectedUserUniqueName,
+		displayName: settings.selectedUserName,
+		name: settings.selectedUserName,
+		isMe: false,
+	};
+}
+
+function getTargetUserCacheKey(targetUser) {
+	return String(targetUser?.id || targetUser?.descriptor || targetUser?.uniqueName || targetUser?.displayName || "me");
+}
+
 function toLocalDayStart(value) {
 	const date = new Date(value);
 	date.setHours(0, 0, 0, 0);

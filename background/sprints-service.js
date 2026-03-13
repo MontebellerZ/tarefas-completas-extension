@@ -114,18 +114,21 @@ async function getCachedTeamDaysOff(settings, iteration) {
 }
 
 async function getCachedSprintItems(settings, iteration) {
+	const currentUser = await getCachedUser(settings);
+	const targetUser = resolveTargetUser(settings, currentUser);
 	const ttl = isSprintHot(iteration.attributes?.finishDate) ? TTL.itemsHot : TTL.itemsCold;
-	const entry = cache.sprintItems.get(iteration.id);
+	const cacheKey = `${iteration.id}|${getTargetUserCacheKey(targetUser)}`;
+	const entry = cache.sprintItems.get(cacheKey);
 	if (isFresh(entry, ttl)) return entry.data;
-	const wiql = buildSprintItemsWiql(settings.projectName, iteration.path || iteration.name);
+	const wiql = buildSprintItemsWiql(settings.projectName, iteration.path || iteration.name, targetUser);
 	const ids = await runWiql(settings, wiql);
 	if (!ids.length) {
-		cache.sprintItems.set(iteration.id, { data: [], at: Date.now() });
+		cache.sprintItems.set(cacheKey, { data: [], at: Date.now() });
 		return [];
 	}
 	const rawItems = await fetchWorkItemsBatch(settings, ids);
 	const data = rawItems.map((item) => normalizeWorkItem(item, settings));
-	cache.sprintItems.set(iteration.id, { data, at: Date.now() });
+	cache.sprintItems.set(cacheKey, { data, at: Date.now() });
 	return data;
 }
 
@@ -144,13 +147,14 @@ async function loadSprintDataset() {
 		getCachedTeamSettings(settings),
 		getCachedIterations(settings),
 	]);
+	const targetUser = resolveTargetUser(settings, currentUser);
 
 	const withCapacity = await Promise.all(
 		iterations.map((iter) => getCachedCapacity(settings, iter).then((cap) => ({ iter, cap }))),
 	);
 
 	const userIterations = withCapacity.filter(({ cap }) =>
-		cap.some((entry) => matchesIdentity(entry.teamMember, currentUser)),
+		cap.some((entry) => matchesIdentity(entry.teamMember, targetUser)),
 	);
 
 	if (!userIterations.length) {
@@ -159,7 +163,7 @@ async function loadSprintDataset() {
 
 	const sprintData = await Promise.all(
 		userIterations.map(async ({ iter, cap }) => {
-			const currentCapacity = cap.find((entry) => matchesIdentity(entry.teamMember, currentUser));
+			const currentCapacity = cap.find((entry) => matchesIdentity(entry.teamMember, targetUser));
 			const [teamDaysOff, items] = await Promise.all([
 				getCachedTeamDaysOff(settings, iter),
 				getCachedSprintItems(settings, iter),
@@ -184,7 +188,7 @@ async function loadSprintDataset() {
 		});
 	}
 
-	return { settings, currentUser, sprints: sortSprintResults(sprintResults) };
+	return { settings, currentUser, targetUser, sprints: sortSprintResults(sprintResults) };
 }
 
 async function listSprints() {

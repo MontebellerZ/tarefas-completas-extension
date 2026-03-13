@@ -26,6 +26,10 @@ const DEFAULT_SETTINGS = {
 	projectName: "",
 	teamId: "",
 	teamName: "",
+	selectedUserId: "",
+	selectedUserName: "",
+	selectedUserUniqueName: "",
+	selectedUserDescriptor: "",
 };
 
 const cache = {
