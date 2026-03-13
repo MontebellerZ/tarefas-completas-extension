@@ -14,7 +14,7 @@ const detailOpenLinkButton = document.getElementById("detailOpenLinkButton");
 const detailMeta = document.getElementById("detailMeta");
 const detailDescription = document.getElementById("detailDescription");
 
-let lastRecentScrollTop = 0;
+let lastWindowScrollTop = 0;
 let currentDetailItemUrl = "";
 
 function showResult(text) {
@@ -205,7 +205,12 @@ function openItemInAzure(url) {
 }
 
 function showDetail(item) {
-  lastRecentScrollTop = recentList.scrollTop;
+  lastWindowScrollTop =
+    window.scrollY ||
+    (document.scrollingElement ? document.scrollingElement.scrollTop : 0) ||
+    document.documentElement.scrollTop ||
+    document.body.scrollTop ||
+    0;
 
   detailMeta.innerHTML = "";
   const card = buildItemCard(item, { clickable: false });
@@ -217,13 +222,27 @@ function showDetail(item) {
   detailOpenLinkButton.classList.toggle("hidden", !currentDetailItemUrl);
   recentSection.classList.add("hidden");
   detailSection.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    detailSection.scrollTop = 0;
+    window.scrollTo(0, 0);
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = 0;
+    }
+    document.documentElement.scrollTop = 0;
+    document.body.scrollTop = 0;
+  });
 }
 
 function showList() {
   detailSection.classList.add("hidden");
   recentSection.classList.remove("hidden");
   requestAnimationFrame(() => {
-    recentList.scrollTop = lastRecentScrollTop;
+    window.scrollTo(0, lastWindowScrollTop);
+    if (document.scrollingElement) {
+      document.scrollingElement.scrollTop = lastWindowScrollTop;
+    }
+    document.documentElement.scrollTop = lastWindowScrollTop;
+    document.body.scrollTop = lastWindowScrollTop;
   });
 }
 
@@ -269,12 +288,12 @@ async function loadRecentChanges() {
   try {
     const response = await sendRuntimeMessage({ action: "listRecentChanges" });
     if (!response?.ok) {
-      throw new Error(response?.error || "Falha ao buscar itens alterados.");
+      recentList.textContent = response?.error || "Erro ao buscar itens.";
+      return;
     }
-
     renderRecentList(response.items || []);
   } catch (error) {
-    recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha ao buscar itens alterados."}`;
+    recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
   } finally {
     recentButton.disabled = false;
   }
