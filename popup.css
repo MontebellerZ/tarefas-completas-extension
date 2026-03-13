@@ -259,6 +259,10 @@ button:disabled {
   gap: 6px;
 }
 
+.detail-title-row h2 {
+  margin: 0;
+}
+
 .back-arrow {
   border: 0;
   background: transparent;
@@ -267,6 +271,11 @@ button:disabled {
   font-size: 18px;
   line-height: 1;
   cursor: pointer;
+}
+
+.back-arrow-icon {
+  display: inline-block;
+  transform: rotate(180deg);
 }
 
 .detail-card {

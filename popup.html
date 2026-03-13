@@ -22,12 +22,10 @@
         </div>
       </div>
 
+      <section id="result" class="result hidden" aria-live="polite"></section>
+
       <button id="runButton" type="button">Calcular tempo diario</button>
       <button id="recentButton" type="button">Alteracoes desde ontem</button>
-
-      <section id="result" class="result" aria-live="polite">
-        Clique no botao para calcular.
-      </section>
 
       <section id="recentSection" class="recent-section">
         <h2>Itens alterados</h2>
@@ -38,7 +36,7 @@
         <div class="detail-header">
           <div class="detail-title-row">
             <button id="backArrowButton" type="button" class="back-arrow" aria-label="Voltar para a lista">
-              &larr;
+              <span class="back-arrow-icon">➜</span>
             </button>
             <h2>Detalhes</h2>
           </div>

@@ -12,6 +12,11 @@ const detailDescription = document.getElementById("detailDescription");
 
 let lastRecentScrollTop = 0;
 
+function showResult(text) {
+  result.textContent = text;
+  result.classList.remove("hidden");
+}
+
 function sendRuntimeMessage(message) {
   return new Promise((resolve, reject) => {
     chrome.runtime.sendMessage(message, (response) => {
@@ -263,13 +268,11 @@ function formatMetrics(metrics) {
 
 async function init() {
   runButton.disabled = true;
-  result.textContent = "Carregando sprints da API...";
 
   try {
     await loadSprints();
-    result.textContent = "Selecione a sprint e clique para calcular.";
   } catch (error) {
-    result.textContent = `Erro: ${error instanceof Error ? error.message : "Falha ao carregar sprints."}`;
+    showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao carregar sprints."}`);
   } finally {
     runButton.disabled = false;
   }
@@ -277,7 +280,7 @@ async function init() {
 
 runButton.addEventListener("click", () => {
   runButton.disabled = true;
-  result.textContent = "Consultando API do Azure DevOps...";
+  showResult("Consultando API do Azure DevOps...");
 
   const days = Number(daysInput.value) > 0 ? Number(daysInput.value) : 15;
   const sprint = sprintSelect.value;
@@ -287,16 +290,16 @@ runButton.addEventListener("click", () => {
 
     const runtimeError = chrome.runtime.lastError;
     if (runtimeError) {
-      result.textContent = `Erro: ${runtimeError.message}`;
+      showResult(`Erro: ${runtimeError.message}`);
       return;
     }
 
     if (!response?.ok) {
-      result.textContent = `Erro: ${response?.error || "Falha inesperada."}`;
+      showResult(`Erro: ${response?.error || "Falha inesperada."}`);
       return;
     }
 
-    result.textContent = formatMetrics(response.metrics);
+    showResult(formatMetrics(response.metrics));
   });
 });
 
