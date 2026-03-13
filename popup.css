@@ -17,6 +17,7 @@ body {
   margin: 0;
   background: #f5f7fb;
   color: #1f2937;
+  overflow: auto;
 }
 
 .container {
@@ -25,6 +26,13 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+}
+
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-height: 0;
 }
 
 h1 {
@@ -84,13 +92,15 @@ button:disabled {
 }
 
 .result {
-  min-height: 86px;
+  min-height: 72px;
   border-radius: 8px;
-  background: #fff;
-  border: 1px solid #d9e1ee;
+  background: linear-gradient(135deg, #ffffff, #eef6ff);
+  border: 1px solid #c6d9f7;
+  border-left: 4px solid #0f6cbd;
   padding: 10px;
   white-space: pre-line;
   font-size: 13px;
+  box-shadow: 0 1px 3px rgba(15, 108, 189, 0.12);
 }
 
 .recent-section,
@@ -101,6 +111,17 @@ button:disabled {
   padding: 10px;
 }
 
+.changes-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.changes-header h2 {
+  margin: 0;
+  font-size: 15px;
+}
+
 .recent-section h2,
 .detail-section h2 {
   margin: 0 0 8px;
@@ -108,7 +129,7 @@ button:disabled {
 }
 
 .recent-list {
-  max-height: 280px;
+  max-height: 520px;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -158,6 +179,17 @@ button:disabled {
   white-space: normal;
 }
 
+.external-link-button {
+  border: 0;
+  background: #e8f3ff;
+  color: #0f6cbd;
+  font-size: 14px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
 .recent-item-row {
   display: flex;
   justify-content: space-between;
@@ -204,30 +236,30 @@ button:disabled {
   background: #605e5c;
 }
 
-.type-bug {
-  border-left-color: var(--bug);
-}
-
 .type-bug .item-id-chip {
   background: var(--bug);
   color: #fff;
 }
 
-.type-task {
-  border-left-color: var(--task);
+.type-bug {
+  border-left-color: var(--bug);
 }
 
 .type-task .item-id-chip {
   background: var(--task);
 }
 
-.type-other {
-  border-left-color: var(--other);
+.type-task {
+  border-left-color: var(--task);
 }
 
 .type-other .item-id-chip {
   background: var(--other);
   color: #fff;
+}
+
+.type-other {
+  border-left-color: var(--other);
 }
 
 .detail-meta {
@@ -251,6 +283,9 @@ button:disabled {
 
 .detail-header {
   margin-bottom: 8px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
 }
 
 .detail-title-row {

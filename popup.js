@@ -1,5 +1,8 @@
 const runButton = document.getElementById("runButton");
 const recentButton = document.getElementById("recentButton");
+const initialView = document.getElementById("initialView");
+const changesView = document.getElementById("changesView");
+const backToInitialButton = document.getElementById("backToInitialButton");
 const result = document.getElementById("result");
 const daysInput = document.getElementById("days");
 const sprintSelect = document.getElementById("sprintSelect");
@@ -7,10 +10,12 @@ const recentList = document.getElementById("recentList");
 const recentSection = document.getElementById("recentSection");
 const detailSection = document.getElementById("detailSection");
 const backArrowButton = document.getElementById("backArrowButton");
+const detailOpenLinkButton = document.getElementById("detailOpenLinkButton");
 const detailMeta = document.getElementById("detailMeta");
 const detailDescription = document.getElementById("detailDescription");
 
 let lastRecentScrollTop = 0;
+let currentDetailItemUrl = "";
 
 function showResult(text) {
   result.textContent = text;
@@ -52,13 +57,13 @@ function populateSprintSelect(sprints, defaultSprint) {
 
 function decodeHtmlToText(html) {
   if (!html) {
-    return "Sem descricao.";
+    return "Sem descrição.";
   }
 
   const parser = new DOMParser();
   const doc = parser.parseFromString(String(html), "text/html");
   const text = (doc.body.textContent || "").replace(/\s+\n/g, "\n").trim();
-  return text || "Sem descricao.";
+  return text || "Sem descrição.";
 }
 
 function normalizeType(type) {
@@ -138,7 +143,7 @@ function buildItemCard(item, { clickable = true } = {}) {
 
   const title = document.createElement("div");
   title.className = "recent-item-title";
-  title.textContent = item.title || "Sem titulo";
+  title.textContent = item.title || "Sem título";
 
   header.appendChild(chip);
   header.appendChild(title);
@@ -186,6 +191,19 @@ function buildItemCard(item, { clickable = true } = {}) {
   return card;
 }
 
+function openItemInAzure(url) {
+  if (!url) {
+    return;
+  }
+
+  if (chrome?.tabs?.create) {
+    chrome.tabs.create({ url });
+    return;
+  }
+
+  window.open(url, "_blank", "noopener,noreferrer");
+}
+
 function showDetail(item) {
   lastRecentScrollTop = recentList.scrollTop;
 
@@ -194,7 +212,9 @@ function showDetail(item) {
   card.classList.add("detail-card");
   detailMeta.appendChild(card);
 
-  detailDescription.textContent = decodeHtmlToText(item.description);
+  detailDescription.innerHTML = item.description || "<em>Sem descrição.</em>";
+  currentDetailItemUrl = item.itemUrl || "";
+  detailOpenLinkButton.classList.toggle("hidden", !currentDetailItemUrl);
   recentSection.classList.add("hidden");
   detailSection.classList.remove("hidden");
 }
@@ -207,9 +227,21 @@ function showList() {
   });
 }
 
+function showChangesView() {
+  initialView.classList.add("hidden");
+  changesView.classList.remove("hidden");
+}
+
+function showInitialView() {
+  changesView.classList.add("hidden");
+  detailSection.classList.add("hidden");
+  recentSection.classList.add("hidden");
+  initialView.classList.remove("hidden");
+}
+
 function renderRecentList(items) {
   if (!items.length) {
-    recentList.textContent = "Nenhum item alterado encontrado no periodo.";
+    recentList.textContent = "Nenhum item alterado encontrado no período.";
     detailSection.classList.add("hidden");
     recentSection.classList.remove("hidden");
     return;
@@ -229,6 +261,7 @@ function renderRecentList(items) {
 
 async function loadRecentChanges() {
   recentButton.disabled = true;
+  showChangesView();
   detailSection.classList.add("hidden");
   recentSection.classList.remove("hidden");
   recentList.textContent = "Carregando itens alterados...";
@@ -261,8 +294,8 @@ function formatMetrics(metrics) {
     `Sprint: ${metrics.selectedSprintLabel || "Todas as sprints"}`,
     `Tarefas iniciadas: ${metrics.startedTasks}`,
     `Soma de horas: ${Number(metrics.sumHours).toFixed(4)}`,
-    `Dias concluidos: ${metrics.completedDays}`,
-    `Media diaria: ${Number(metrics.dailyAverage).toFixed(4)}`,
+    `Dias concluídos: ${metrics.completedDays}`,
+    `Média diária: ${Number(metrics.dailyAverage).toFixed(4)}`,
   ].join("\n");
 }
 
@@ -307,8 +340,16 @@ recentButton.addEventListener("click", () => {
   loadRecentChanges();
 });
 
+backToInitialButton.addEventListener("click", () => {
+  showInitialView();
+});
+
 backArrowButton.addEventListener("click", () => {
   showList();
+});
+
+detailOpenLinkButton.addEventListener("click", () => {
+  openItemInAzure(currentDetailItemUrl);
 });
 
 init();

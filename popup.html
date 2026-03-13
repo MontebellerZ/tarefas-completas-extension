@@ -3,46 +3,59 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Azure Query Metrics</title>
+    <title>Métricas do Usuário Azure</title>
     <link rel="stylesheet" href="popup.css" />
   </head>
   <body>
     <main class="container">
-      <h1>Azure Query Metrics</h1>
+      <section id="initialView" class="view">
+        <h1>Métricas do Usuário Azure</h1>
 
-      <div class="controls-row">
-        <div class="field-group field-sprint">
-          <label for="sprintSelect">Sprint (Iteration Path)</label>
-          <select id="sprintSelect"></select>
-        </div>
+        <div class="controls-row">
+          <div class="field-group field-sprint">
+            <label for="sprintSelect">Sprint</label>
+            <select id="sprintSelect"></select>
+          </div>
 
-        <div class="field-group field-days">
-          <label for="days">Dias concluidos</label>
-          <input id="days" type="number" min="1" value="15" />
-        </div>
-      </div>
-
-      <section id="result" class="result hidden" aria-live="polite"></section>
-
-      <button id="runButton" type="button">Calcular tempo diario</button>
-      <button id="recentButton" type="button">Alteracoes desde ontem</button>
-
-      <section id="recentSection" class="recent-section">
-        <h2>Itens alterados</h2>
-        <div id="recentList" class="recent-list">Nenhum item carregado.</div>
-      </section>
-
-      <section id="detailSection" class="detail-section hidden">
-        <div class="detail-header">
-          <div class="detail-title-row">
-            <button id="backArrowButton" type="button" class="back-arrow" aria-label="Voltar para a lista">
-              <span class="back-arrow-icon">➜</span>
-            </button>
-            <h2>Detalhes</h2>
+          <div class="field-group field-days">
+            <label for="days">Dias concluídos</label>
+            <input id="days" type="number" min="1" value="15" />
           </div>
         </div>
-        <div id="detailMeta" class="detail-meta"></div>
-        <div id="detailDescription" class="detail-description"></div>
+
+        <section id="result" class="result hidden" aria-live="polite"></section>
+
+        <button id="runButton" type="button">Calcular tempo diário</button>
+        <button id="recentButton" type="button">Alterações desde ontem</button>
+      </section>
+
+      <section id="changesView" class="view hidden">
+        <div class="changes-header">
+          <button id="backToInitialButton" type="button" class="back-arrow" aria-label="Voltar para tela inicial">
+            <span class="back-arrow-icon">➜</span>
+          </button>
+          <h2>Itens Alterados</h2>
+        </div>
+
+        <section id="recentSection" class="recent-section">
+          <div id="recentList" class="recent-list">Nenhum item carregado.</div>
+        </section>
+
+        <section id="detailSection" class="detail-section hidden">
+          <div class="detail-header">
+            <div class="detail-title-row">
+              <button id="backArrowButton" type="button" class="back-arrow" aria-label="Voltar para a lista">
+                <span class="back-arrow-icon">➜</span>
+              </button>
+              <h2>Detalhes</h2>
+            </div>
+            <button id="detailOpenLinkButton" type="button" class="external-link-button" aria-label="Abrir item no Azure" title="Abrir item no Azure">
+              &#8599;
+            </button>
+          </div>
+          <div id="detailMeta" class="detail-meta"></div>
+          <div id="detailDescription" class="detail-description"></div>
+        </section>
       </section>
     </main>
 

@@ -332,6 +332,9 @@ async function loadRecentChangesFromApi() {
       sprint: formatIterationPath(iterationPath, ctx.project),
       description,
       changedDate,
+      itemUrl:
+        `${ctx.origin}/${encodeURIComponent(ctx.organization)}/` +
+        `${encodeURIComponent(ctx.project)}/_workitems/edit/${item.id}`,
     };
   });
 
