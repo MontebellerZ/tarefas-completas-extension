@@ -64,20 +64,194 @@ async function listUsers(organization, projectId, teamId, tokenValue) {
 		throw new Error("Selecione organizacao, projeto e time para carregar os usuarios.");
 	}
 
-	const response = await azureFetchJson(
-		`https://dev.azure.com/${encodePathPart(org)}/_apis/projects/${encodePathPart(projectId)}/teams/${encodePathPart(teamId)}/members?api-version=7.1-preview.1`,
-		{ tokenValue },
-	);
+	function collectIdentityKeys(identity) {
+		const keys = new Set();
+		if (!identity) return keys;
 
-	const source = Array.isArray(response?.value)
-		? response.value
-		: Array.isArray(response?.members)
-			? response.members
-			: [];
+		const values = [
+			identity.id,
+			identity.descriptor,
+			identity.uniqueName,
+			identity.mailAddress,
+			identity.emailAddress,
+			identity.displayName,
+			identity.name,
+			identity.providerDisplayName,
+		];
+
+		for (const value of values) {
+			const normalized = String(value || "").trim().toLowerCase();
+			if (!normalized) continue;
+			keys.add(normalized);
+			const emailMatch = normalized.match(/<([^>]+)>/);
+			if (emailMatch?.[1]) {
+				keys.add(emailMatch[1].trim().toLowerCase());
+			}
+		}
+
+		return keys;
+	}
+
+	const activeIdentityKeys = new Set();
+	const activeMembersByKey = new Map();
+	try {
+		const iterationsResponse = await azureFetchJson(
+			`https://dev.azure.com/${encodePathPart(org)}/${encodePathPart(projectId)}/${encodePathPart(teamId)}/_apis/work/teamsettings/iterations?api-version=${API_VERSION}`,
+			{ tokenValue },
+		);
+
+		const recentIterations = [...(iterationsResponse.value || [])]
+			.sort((left, right) => {
+				const leftDate = new Date(left?.attributes?.finishDate || left?.attributes?.startDate || 0).getTime();
+				const rightDate = new Date(right?.attributes?.finishDate || right?.attributes?.startDate || 0).getTime();
+				return rightDate - leftDate;
+			})
+			.slice(0, 5);
+
+		const capacitiesPerIteration = await Promise.all(
+			recentIterations.map(async (iteration) => {
+				const capacityResponse = await azureFetchJson(
+					`https://dev.azure.com/${encodePathPart(org)}/${encodePathPart(projectId)}/${encodePathPart(teamId)}/_apis/work/teamsettings/iterations/${encodePathPart(iteration.id)}/capacities?api-version=${CAPACITY_API_VERSION}`,
+					{ tokenValue },
+				);
+
+				return Array.isArray(capacityResponse?.value)
+					? capacityResponse.value
+					: Array.isArray(capacityResponse)
+						? capacityResponse
+						: [];
+			}),
+		);
+
+		for (const capacities of capacitiesPerIteration) {
+			for (const entry of capacities) {
+				const memberIdentity = entry?.teamMember;
+				for (const key of collectIdentityKeys(memberIdentity)) {
+					activeIdentityKeys.add(key);
+					if (!activeMembersByKey.has(key)) {
+						activeMembersByKey.set(key, memberIdentity);
+					}
+				}
+			}
+		}
+
+		// Also consider assignees present in work items from recent sprints.
+		const assigneeFields = ["System.AssignedTo"];
+		for (const iteration of recentIterations) {
+			const iterationPath = String(iteration?.path || iteration?.name || "").trim();
+			if (!iterationPath) continue;
+
+			const wiql =
+				`SELECT [System.Id] FROM WorkItems` +
+				` WHERE [System.IterationPath] = '${iterationPath.replace(/'/g, "''")}'` +
+				` AND [System.WorkItemType] IN ('Task', 'Bug')` +
+				` ORDER BY [System.Id]`;
+
+			const wiqlResponse = await azureFetchJson(
+				`https://dev.azure.com/${encodePathPart(org)}/${encodePathPart(projectId)}/_apis/wit/wiql?api-version=${API_VERSION}`,
+				{
+					tokenValue,
+					method: "POST",
+					headers: { "Content-Type": "application/json" },
+					body: JSON.stringify({ query: wiql }),
+				},
+			);
+
+			const ids = (wiqlResponse.workItems || []).map((item) => item.id).filter(Number.isInteger);
+			for (let index = 0; index < ids.length; index += 200) {
+				const chunk = ids.slice(index, index + 200);
+				const batchResponse = await azureFetchJson(
+					`https://dev.azure.com/${encodePathPart(org)}/${encodePathPart(projectId)}/_apis/wit/workitemsbatch?api-version=${API_VERSION}`,
+					{
+						tokenValue,
+						method: "POST",
+						headers: { "Content-Type": "application/json" },
+						body: JSON.stringify({ ids: chunk, fields: assigneeFields, errorPolicy: "Omit" }),
+					},
+				);
+
+				for (const workItem of batchResponse.value || []) {
+					const assignedTo = workItem?.fields?.["System.AssignedTo"];
+					for (const key of collectIdentityKeys(assignedTo)) {
+						activeIdentityKeys.add(key);
+						if (!activeMembersByKey.has(key)) {
+							activeMembersByKey.set(key, assignedTo);
+						}
+					}
+				}
+			}
+		}
+	} catch {
+		// If capacity lookup fails, gracefully fall back to full members list.
+	}
+
+	const source = [];
+	let continuationToken = "";
+	do {
+		let url =
+			`https://dev.azure.com/${encodePathPart(org)}/_apis/projects/` +
+			`${encodePathPart(projectId)}/teams/${encodePathPart(teamId)}/members?$top=100&api-version=7.1-preview.1`;
+
+		if (continuationToken) {
+			url += `&continuationToken=${encodeURIComponent(continuationToken)}`;
+		}
+
+		const saved = await getSettings();
+		const effectiveTokenValue = String(tokenValue ?? saved.tokenValue ?? "").trim();
+		if (!effectiveTokenValue) {
+			throw new Error("PAT nao configurado.");
+		}
+
+		const response = await fetch(url, {
+			credentials: "omit",
+			headers: {
+				Accept: "application/json",
+				Authorization: createAuthHeader(effectiveTokenValue),
+			},
+		});
+
+		if (response.status === 401 || response.status === 403) {
+			throw new Error("PAT invalido ou sem permissao suficiente no Azure DevOps.");
+		}
+
+		if (!response.ok) {
+			const text = await response.text();
+			throw new Error(`Falha na API do Azure (${response.status}): ${text.slice(0, 200)}`);
+		}
+
+		const body = await response.json();
+		const pageMembers = Array.isArray(body?.value)
+			? body.value
+			: Array.isArray(body?.members)
+				? body.members
+				: [];
+		source.push(...pageMembers);
+
+		continuationToken =
+			String(response.headers.get("x-ms-continuationtoken") || response.headers.get("X-MS-ContinuationToken") || "").trim();
+	} while (continuationToken);
+
+	// Ensure people active in recent sprint capacities are present even if members endpoint omitted them.
+	for (const memberIdentity of activeMembersByKey.values()) {
+		source.push({ identity: memberIdentity });
+	}
 
 	const byKey = new Map();
 	for (const rawMember of source) {
 		const identity = rawMember?.identity || rawMember?.member || rawMember;
+		const identityKeys = collectIdentityKeys(identity);
+
+		if (activeIdentityKeys.size > 0) {
+			let isActive = false;
+			for (const key of identityKeys) {
+				if (activeIdentityKeys.has(key)) {
+					isActive = true;
+					break;
+				}
+			}
+			if (!isActive) continue;
+		}
+
 		const id = String(identity?.id || "").trim();
 		const descriptor = String(identity?.descriptor || "").trim();
 		const uniqueName = String(identity?.uniqueName || identity?.mailAddress || identity?.emailAddress || "").trim();
