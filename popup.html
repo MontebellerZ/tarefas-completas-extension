@@ -9,7 +9,12 @@
   <body>
     <main class="container">
       <section id="initialView" class="view">
-        <h1>Métricas do Usuário Azure</h1>
+        <div class="initial-header">
+          <h1>Métricas do Usuário Azure</h1>
+          <button id="settingsButton" type="button" class="settings-icon-button" aria-label="Configurações" title="Configurações">
+            &#9881;
+          </button>
+        </div>
 
         <div class="controls-row">
           <div class="field-group field-sprint">
@@ -17,16 +22,59 @@
             <select id="sprintSelect"></select>
           </div>
 
-          <div class="field-group field-days">
-            <label for="days">Dias concluídos</label>
-            <input id="days" type="number" min="1" value="15" />
+          <div class="field-group field-toggle">
+            <label for="includeCurrentDayToggle">Considerar dia atual</label>
+            <label class="switch" for="includeCurrentDayToggle">
+              <input id="includeCurrentDayToggle" type="checkbox" checked />
+              <span class="switch-slider"></span>
+            </label>
           </div>
         </div>
 
         <section id="result" class="result hidden" aria-live="polite"></section>
 
         <button id="runButton" type="button">Calcular tempo diário</button>
-        <button id="recentButton" type="button">Alterações desde ontem</button>
+        <button id="recentButton" type="button">Alterações recentes</button>
+      </section>
+
+      <section id="settingsView" class="view hidden">
+        <div class="changes-header">
+          <button id="backFromSettingsButton" type="button" class="back-arrow" aria-label="Voltar para tela inicial">
+            <span class="back-arrow-icon">➜</span>
+          </button>
+          <h2>Configurações</h2>
+        </div>
+
+        <div class="field-group">
+          <label for="tokenNameInput">Nome do token</label>
+          <input id="tokenNameInput" type="text" placeholder="Ex.: PAT Azure DevOps" />
+        </div>
+
+        <div class="field-group">
+          <label for="tokenValueInput">Valor do token (PAT)</label>
+          <input id="tokenValueInput" type="password" placeholder="Cole aqui o PAT" />
+        </div>
+
+        <div class="field-group">
+          <label for="organizationInput">Organização</label>
+          <input id="organizationInput" type="text" placeholder="Ex.: aguiabrancacomercio" />
+        </div>
+
+        <div class="field-group">
+          <label for="projectSelect">Projeto</label>
+          <select id="projectSelect"></select>
+        </div>
+
+        <div class="field-group">
+          <label for="teamSelect">Time</label>
+          <select id="teamSelect"></select>
+        </div>
+
+        <div class="settings-actions-row">
+          <button id="saveSettingsButton" type="button">Salvar token</button>
+          <button id="clearSettingsButton" type="button">Limpar dados</button>
+        </div>
+        <section id="settingsStatus" class="result hidden" aria-live="polite"></section>
       </section>
 
       <section id="changesView" class="view hidden">
@@ -34,7 +82,7 @@
           <button id="backToInitialButton" type="button" class="back-arrow" aria-label="Voltar para tela inicial">
             <span class="back-arrow-icon">➜</span>
           </button>
-          <h2>Itens Alterados</h2>
+          <h2>Alterações desde o último dia útil</h2>
         </div>
 
         <section id="recentSection" class="recent-section">

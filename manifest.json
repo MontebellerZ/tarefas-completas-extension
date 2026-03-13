@@ -3,7 +3,7 @@
   "name": "Azure Query Metrics",
   "version": "1.0.0",
   "description": "Abre uma query do Azure DevOps e calcula resumo de horas automaticamente.",
-  "permissions": ["tabs"],
+  "permissions": ["tabs", "storage"],
   "host_permissions": ["https://dev.azure.com/*"],
   "background": {
     "service_worker": "background.js"

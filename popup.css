@@ -38,9 +38,51 @@ body {
   flex: 1;
 }
 
+.view .field-group input {
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.settings-actions-row {
+  display: flex;
+  gap: 8px;
+}
+
+.settings-actions-row button {
+  flex: 1;
+}
+
 h1 {
   margin: 0;
   font-size: 16px;
+}
+
+.initial-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.settings-icon-button {
+  background: #e8f3ff;
+  color: #0f6cbd;
+  border: 1px solid #c7ddf8;
+  border-radius: 8px;
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.settings-icon-button:disabled {
+  background: #eef2f8;
+  color: #8ba4be;
+  cursor: wait;
 }
 
 label {
@@ -51,7 +93,7 @@ label {
 .controls-row {
   display: flex;
   gap: 8px;
-  align-items: flex-end;
+  align-items: flex-start;
 }
 
 .field-group {
@@ -64,8 +106,8 @@ label {
   flex: 1;
 }
 
-.field-days {
-  width: 120px;
+.field-toggle {
+  width: 152px;
 }
 
 input,
@@ -76,6 +118,48 @@ select {
   font-size: 14px;
   background: #fff;
   color: #1f2937;
+}
+
+.switch {
+  position: relative;
+  display: inline-flex;
+  width: 52px;
+  height: 30px;
+  align-items: center;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.switch-slider {
+  position: absolute;
+  inset: 0;
+  background: #cbd5e1;
+  border-radius: 999px;
+  transition: background 0.2s ease;
+}
+
+.switch-slider::before {
+  content: "";
+  position: absolute;
+  width: 22px;
+  height: 22px;
+  left: 4px;
+  top: 4px;
+  background: #fff;
+  border-radius: 999px;
+  transition: transform 0.2s ease;
+}
+
+.switch input:checked + .switch-slider {
+  background: #0f6cbd;
+}
+
+.switch input:checked + .switch-slider::before {
+  transform: translateX(22px);
 }
 
 button {
@@ -199,6 +283,10 @@ button:disabled {
   border-radius: 6px;
 }
 
+#clearSettingsButton {
+  background: #d13438;
+}
+
 .recent-item-row {
   display: flex;
   justify-content: space-between;
@@ -268,6 +356,21 @@ button:disabled {
 }
 
 .type-other {
+  border-left-color: var(--other);
+}
+
+.type-bug .detail-card,
+.detail-card.type-bug {
+  border-left-color: var(--bug);
+}
+
+.type-task .detail-card,
+.detail-card.type-task {
+  border-left-color: var(--task);
+}
+
+.type-other .detail-card,
+.detail-card.type-other {
   border-left-color: var(--other);
 }
 
