@@ -4,9 +4,13 @@ const result = document.getElementById("result");
 const daysInput = document.getElementById("days");
 const sprintSelect = document.getElementById("sprintSelect");
 const recentList = document.getElementById("recentList");
+const recentSection = document.getElementById("recentSection");
 const detailSection = document.getElementById("detailSection");
+const backArrowButton = document.getElementById("backArrowButton");
 const detailMeta = document.getElementById("detailMeta");
 const detailDescription = document.getElementById("detailDescription");
+
+let lastRecentScrollTop = 0;
 
 function sendRuntimeMessage(message) {
   return new Promise((resolve, reject) => {
@@ -52,66 +56,176 @@ function decodeHtmlToText(html) {
   return text || "Sem descricao.";
 }
 
-function formatListMeta(item) {
-  const tags = item.tags?.length ? item.tags.join(", ") : "Sem tags";
-  return [
-    `Tipo: ${item.type || "-"}`,
-    `Estimated: ${Number(item.estimated || 0).toFixed(4)}`,
-    `Completed: ${Number(item.completed || 0).toFixed(4)}`,
-    `State: ${item.state || "-"}`,
-    `Tags: ${tags}`,
-    `Sprint: ${item.sprint || "Sem sprint"}`,
-  ].join(" | ");
+function normalizeType(type) {
+  const value = String(type || "").toLowerCase();
+  if (value === "bug") {
+    return "bug";
+  }
+  if (value === "task") {
+    return "task";
+  }
+  return "other";
+}
+
+function getStateColor(state) {
+  const value = String(state || "").trim().toLowerCase();
+
+  if (value === "pause") {
+    return "var(--state-pause)";
+  }
+  if (value === "in progress" || value === "doing") {
+    return "var(--state-inprogress)";
+  }
+  if (value === "to refactor" || value === "approved" || value === "to do") {
+    return "var(--state-neutral)";
+  }
+  if (value === "to test") {
+    return "var(--state-test)";
+  }
+  if (value === "to release") {
+    return "var(--state-release)";
+  }
+  if (value === "to review") {
+    return "var(--state-review)";
+  }
+  if (value === "done") {
+    return "var(--state-done)";
+  }
+
+  return "#d0d0d4";
+}
+
+function formatNumber(value) {
+  if (!Number.isFinite(Number(value))) {
+    return "0";
+  }
+
+  const normalized = Number(value);
+  if (Number.isInteger(normalized)) {
+    return String(normalized);
+  }
+
+  return normalized.toFixed(4).replace(/\.0+$/, "").replace(/(\.\d*?)0+$/, "$1");
+}
+
+function createTagChip(text, isEmpty = false) {
+  const chip = document.createElement("span");
+  chip.className = isEmpty ? "tag-chip empty" : "tag-chip";
+  chip.textContent = text;
+  return chip;
+}
+
+function buildItemCard(item, { clickable = true } = {}) {
+  const typeClass = `type-${normalizeType(item.type)}`;
+
+  const card = document.createElement(clickable ? "button" : "div");
+  if (clickable) {
+    card.type = "button";
+  }
+  card.className = `recent-item ${typeClass}`;
+
+  const header = document.createElement("div");
+  header.className = "recent-item-header";
+
+  const chip = document.createElement("span");
+  chip.className = "item-id-chip";
+  chip.textContent = String(item.id || "-");
+
+  const title = document.createElement("div");
+  title.className = "recent-item-title";
+  title.textContent = item.title || "Sem titulo";
+
+  header.appendChild(chip);
+  header.appendChild(title);
+
+  const estimateStateRow = document.createElement("div");
+  estimateStateRow.className = "recent-item-row";
+  const estimated = document.createElement("span");
+  estimated.textContent = `Estimated: ${formatNumber(item.estimated)}`;
+
+  const state = document.createElement("span");
+  state.className = "item-state";
+  state.textContent = item.state || "-";
+  state.style.color = getStateColor(item.state);
+
+  estimateStateRow.appendChild(estimated);
+  estimateStateRow.appendChild(state);
+
+  const completedSprintRow = document.createElement("div");
+  completedSprintRow.className = "recent-item-row";
+  const completed = document.createElement("span");
+  completed.textContent = `Completed: ${formatNumber(item.completed)}`;
+
+  const sprint = document.createElement("span");
+  sprint.className = "item-sprint";
+  sprint.textContent = item.sprint || "Sem sprint";
+
+  completedSprintRow.appendChild(completed);
+  completedSprintRow.appendChild(sprint);
+
+  let tagRow = null;
+
+  if (item.tags?.length) {
+    tagRow = document.createElement("div");
+    tagRow.className = "item-tags";
+    item.tags.forEach((tag) => tagRow.appendChild(createTagChip(tag)));
+  }
+
+  card.appendChild(header);
+  card.appendChild(estimateStateRow);
+  card.appendChild(completedSprintRow);
+  if (tagRow) {
+    card.appendChild(tagRow);
+  }
+
+  return card;
 }
 
 function showDetail(item) {
-  const tags = item.tags?.length ? item.tags.join(", ") : "Sem tags";
-  detailMeta.textContent = [
-    `#${item.id}`,
-    item.title || "Sem titulo",
-    `Tipo: ${item.type || "-"}`,
-    `State: ${item.state || "-"}`,
-    `Estimated: ${Number(item.estimated || 0).toFixed(4)}`,
-    `Completed: ${Number(item.completed || 0).toFixed(4)}`,
-    `Tags: ${tags}`,
-    `Sprint: ${item.sprint || "Sem sprint"}`,
-  ].join("\n");
+  lastRecentScrollTop = recentList.scrollTop;
+
+  detailMeta.innerHTML = "";
+  const card = buildItemCard(item, { clickable: false });
+  card.classList.add("detail-card");
+  detailMeta.appendChild(card);
 
   detailDescription.textContent = decodeHtmlToText(item.description);
+  recentSection.classList.add("hidden");
   detailSection.classList.remove("hidden");
+}
+
+function showList() {
+  detailSection.classList.add("hidden");
+  recentSection.classList.remove("hidden");
+  requestAnimationFrame(() => {
+    recentList.scrollTop = lastRecentScrollTop;
+  });
 }
 
 function renderRecentList(items) {
   if (!items.length) {
     recentList.textContent = "Nenhum item alterado encontrado no periodo.";
     detailSection.classList.add("hidden");
+    recentSection.classList.remove("hidden");
     return;
   }
 
   recentList.innerHTML = "";
 
   for (const item of items) {
-    const card = document.createElement("button");
-    card.type = "button";
-    card.className = "recent-item";
-
-    const title = document.createElement("div");
-    title.className = "recent-item-title";
-    title.textContent = `#${item.id} - ${item.title || "Sem titulo"}`;
-
-    const meta = document.createElement("div");
-    meta.className = "recent-item-meta";
-    meta.textContent = formatListMeta(item);
-
-    card.appendChild(title);
-    card.appendChild(meta);
+    const card = buildItemCard(item);
     card.addEventListener("click", () => showDetail(item));
     recentList.appendChild(card);
   }
+
+  detailSection.classList.add("hidden");
+  recentSection.classList.remove("hidden");
 }
 
 async function loadRecentChanges() {
   recentButton.disabled = true;
+  detailSection.classList.add("hidden");
+  recentSection.classList.remove("hidden");
   recentList.textContent = "Carregando itens alterados...";
 
   try {
@@ -188,6 +302,10 @@ runButton.addEventListener("click", () => {
 
 recentButton.addEventListener("click", () => {
   loadRecentChanges();
+});
+
+backArrowButton.addEventListener("click", () => {
+  showList();
 });
 
 init();

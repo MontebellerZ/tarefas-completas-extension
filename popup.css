@@ -1,6 +1,16 @@
 :root {
   color-scheme: light;
   font-family: Segoe UI, Arial, sans-serif;
+  --bug: #d13438;
+  --task: #ffb900;
+  --other: #e3008c;
+  --state-pause: #d13438;
+  --state-inprogress: #0078d4;
+  --state-neutral: #8a8886;
+  --state-test: #ffb900;
+  --state-release: #5c2d91;
+  --state-review: #92c353;
+  --state-done: #107c10;
 }
 
 body {
@@ -25,6 +35,26 @@ h1 {
 label {
   font-size: 12px;
   font-weight: 600;
+}
+
+.controls-row {
+  display: flex;
+  gap: 8px;
+  align-items: flex-end;
+}
+
+.field-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.field-sprint {
+  flex: 1;
+}
+
+.field-days {
+  width: 120px;
 }
 
 input,
@@ -78,7 +108,7 @@ button:disabled {
 }
 
 .recent-list {
-  max-height: 220px;
+  max-height: 280px;
   overflow: auto;
   display: flex;
   flex-direction: column;
@@ -95,34 +125,121 @@ button:disabled {
   cursor: pointer;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 6px;
+  color: #1f2937;
+  border-left-width: 4px;
 }
 
 .recent-item:hover {
   background: #eef5ff;
 }
 
+.recent-item-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.item-id-chip {
+  border-radius: 12px;
+  color: #111;
+  font-weight: 700;
+  font-size: 11px;
+  padding: 2px 8px;
+  flex: none;
+}
+
 .recent-item-title {
   font-size: 12px;
   font-weight: 700;
   color: #1d3557;
+  overflow-wrap: anywhere;
+  white-space: normal;
 }
 
-.recent-item-meta {
+.recent-item-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
   font-size: 11px;
   color: #324763;
+  gap: 10px;
+}
+
+.item-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+}
+
+.item-state::before {
+  content: "";
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: currentColor;
+}
+
+.item-sprint {
+  color: #1f2937;
+}
+
+.item-tags {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tag-chip {
+  border-radius: 999px;
+  background: #0078d4;
+  color: #fff;
+  font-size: 10px;
+  padding: 2px 8px;
+}
+
+.tag-chip.empty {
+  background: #605e5c;
+}
+
+.type-bug {
+  border-left-color: var(--bug);
+}
+
+.type-bug .item-id-chip {
+  background: var(--bug);
+  color: #fff;
+}
+
+.type-task {
+  border-left-color: var(--task);
+}
+
+.type-task .item-id-chip {
+  background: var(--task);
+}
+
+.type-other {
+  border-left-color: var(--other);
+}
+
+.type-other .item-id-chip {
+  background: var(--other);
+  color: #fff;
 }
 
 .detail-meta {
-  white-space: pre-line;
-  font-size: 12px;
-  color: #1f2937;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .detail-description {
   margin-top: 8px;
   white-space: pre-wrap;
-  max-height: 180px;
+  max-height: 230px;
   overflow: auto;
   font-size: 12px;
   color: #1f2937;
@@ -130,6 +247,41 @@ button:disabled {
   border-radius: 6px;
   border: 1px solid #e2e8f0;
   padding: 8px;
+}
+
+.detail-header {
+  margin-bottom: 8px;
+}
+
+.detail-title-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.back-arrow {
+  border: 0;
+  background: transparent;
+  color: #0f6cbd;
+  padding: 0;
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.detail-card {
+  border: 1px solid #d9e1ee;
+  background: #f9fbff;
+  border-radius: 8px;
+  padding: 8px;
+  color: #1f2937;
+  border-left-width: 4px;
+}
+
+.detail-description-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin-bottom: 6px;
 }
 
 .hidden {

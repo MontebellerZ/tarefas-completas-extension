@@ -10,14 +10,20 @@
     <main class="container">
       <h1>Azure Query Metrics</h1>
 
-      <label for="sprintSelect">Sprint (Iteration Path)</label>
-      <select id="sprintSelect"></select>
+      <div class="controls-row">
+        <div class="field-group field-sprint">
+          <label for="sprintSelect">Sprint (Iteration Path)</label>
+          <select id="sprintSelect"></select>
+        </div>
 
-      <label for="days">Dias concluidos</label>
-      <input id="days" type="number" min="1" value="15" />
+        <div class="field-group field-days">
+          <label for="days">Dias concluidos</label>
+          <input id="days" type="number" min="1" value="15" />
+        </div>
+      </div>
 
-      <button id="runButton" type="button">Consultar API e calcular</button>
-      <button id="recentButton" type="button">Buscar itens alterados (24h)</button>
+      <button id="runButton" type="button">Calcular tempo diario</button>
+      <button id="recentButton" type="button">Alteracoes desde ontem</button>
 
       <section id="result" class="result" aria-live="polite">
         Clique no botao para calcular.
@@ -29,7 +35,14 @@
       </section>
 
       <section id="detailSection" class="detail-section hidden">
-        <h2>Detalhes</h2>
+        <div class="detail-header">
+          <div class="detail-title-row">
+            <button id="backArrowButton" type="button" class="back-arrow" aria-label="Voltar para a lista">
+              &larr;
+            </button>
+            <h2>Detalhes</h2>
+          </div>
+        </div>
         <div id="detailMeta" class="detail-meta"></div>
         <div id="detailDescription" class="detail-description"></div>
       </section>
