@@ -1,15 +1,22 @@
 {
   "manifest_version": 3,
-  "name": "Azure Query Metrics",
+  "name": "Métricas do Usuário Azure",
   "version": "1.0.0",
-  "description": "Abre uma query do Azure DevOps e calcula resumo de horas automaticamente.",
+  "description": "Calcula métricas e alterações recentes no Azure DevOps usando PAT e configuração de organização/projeto/time.",
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
   "permissions": ["tabs", "storage"],
   "host_permissions": ["https://dev.azure.com/*"],
   "background": {
     "service_worker": "background.js"
   },
   "action": {
+    "default_icon": "icon.png",
     "default_popup": "popup.html",
-    "default_title": "Coletar métricas"
+    "default_title": "Métricas do Azure DevOps"
   }
 }
