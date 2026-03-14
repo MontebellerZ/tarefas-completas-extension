@@ -80,7 +80,7 @@ function getSelectedUserValue(settings = {}) {
 }
 
 function populateEmptySettingsSelects() {
-	PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", "");
+	PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organização", "");
 	PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 	PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
 	PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
@@ -99,7 +99,7 @@ function previewTokenScopedSettings(settings = {}) {
 	PopupRender.populateSelect(
 		PopupDom.organizationSelect,
 		organization ? [{ value: organization, label: organization, name: organization }] : [],
-		"Selecione uma organizacao",
+		"Selecione uma organização",
 		organization,
 	);
 	PopupRender.populateSelect(
@@ -313,7 +313,14 @@ async function loadTokens(selectedTokenId = "") {
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar tokens.");
 	PopupState.availableTokens = response.tokens || [];
 	const preferred = selectedTokenId || response.selectedTokenId || PopupState.availableTokens[0]?.value || "";
-	PopupRender.populateSelect(PopupDom.tokenSelect, PopupState.availableTokens, "Selecione um token", preferred);
+	PopupDom.tokenSelect.innerHTML = "";
+	for (const token of PopupState.availableTokens) {
+		const option = document.createElement("option");
+		option.value = token.value;
+		option.textContent = token.label;
+		PopupDom.tokenSelect.appendChild(option);
+	}
+	PopupDom.tokenSelect.value = preferred;
 	updateTokenFormState();
 	updateSettingsFormState();
 }
@@ -358,7 +365,7 @@ async function loadOrganizations(selectedOrganization = "") {
 	const tokenValue = getSelectedTokenValue();
 
 	if (!tokenValue) {
-		PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", "");
+		PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organização", "");
 		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
@@ -375,7 +382,7 @@ async function loadOrganizations(selectedOrganization = "") {
 		options.unshift({ value: selectedOrganization, label: selectedOrganization, name: selectedOrganization });
 	}
 	const preferred = selectedOrganization || "";
-	PopupRender.populateSelect(PopupDom.organizationSelect, options, "Selecione uma organizacao", preferred);
+	PopupRender.populateSelect(PopupDom.organizationSelect, options, "Selecione uma organização", preferred);
 	updateSettingsFormState();
 }
 
