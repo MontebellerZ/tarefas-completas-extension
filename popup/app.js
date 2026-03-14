@@ -424,6 +424,8 @@ function showDetail(item) {
 	);
 	PopupDom.recentSection.classList.add("hidden");
 	PopupDom.detailSection.classList.remove("hidden");
+	PopupDom.topPaginationControls.classList.add("hidden");
+	PopupDom.bottomPaginationControls.classList.add("hidden");
 	persistUiStateIfNeeded();
 
 	requestAnimationFrame(() => {
@@ -443,6 +445,7 @@ function showList() {
 	PopupDom.criticalAnalysisButton.classList.add("hidden");
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
+	PopupDom.topPaginationControls.classList.remove("hidden");
 	updateBottomPaginationVisibility();
 	persistUiStateIfNeeded();
 	requestAnimationFrame(() => {
@@ -469,6 +472,7 @@ function showChangesView(mode = "recent") {
 	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.remove("hidden");
+	PopupDom.topPaginationControls.classList.remove("hidden");
 	updatePaginationControls();
 	updateBottomPaginationVisibility();
 	persistUiStateIfNeeded();
@@ -484,6 +488,7 @@ function showSettingsView() {
 	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.settingsView.classList.remove("hidden");
+	PopupDom.topPaginationControls.classList.add("hidden");
 	PopupDom.bottomPaginationControls.classList.add("hidden");
 	persistUiStateIfNeeded();
 }
@@ -506,6 +511,7 @@ function showInitialView() {
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.add("hidden");
+	PopupDom.topPaginationControls.classList.add("hidden");
 	PopupDom.bottomPaginationControls.classList.add("hidden");
 	PopupDom.initialView.classList.remove("hidden");
 	persistUiStateIfNeeded();

@@ -38,6 +38,7 @@ window.PopupDom = {
 	nextPageButton: document.getElementById("nextPageButton"),
 	paginationStatus: document.getElementById("paginationStatus"),
 	itemsPerPageSelect: document.getElementById("itemsPerPageSelect"),
+	topPaginationControls: document.getElementById("topPaginationControls"),
 	previousPageButtonBottom: document.getElementById("previousPageButtonBottom"),
 	nextPageButtonBottom: document.getElementById("nextPageButtonBottom"),
 	paginationStatusBottom: document.getElementById("paginationStatusBottom"),
