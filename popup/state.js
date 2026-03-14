@@ -10,5 +10,6 @@ window.PopupState = {
 	confirmationResolver: null,
 	tokenSettingsByTokenId: {},
 	loadingRequests: 0,
+	shouldReloadMetricsAfterTokenDeletion: false,
 	isRestoringUiState: false,
 };

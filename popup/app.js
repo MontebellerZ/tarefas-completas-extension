@@ -869,6 +869,7 @@ function bindEvents() {
 			if (!response.hasTokens) {
 				PopupState.availableTokens = [];
 				PopupState.hasCompleteSettings = false;
+				PopupState.shouldReloadMetricsAfterTokenDeletion = false;
 				clearTokenForm();
 				showTokenSetupView(false);
 				PopupRender.showTokenStatus("Cadastre um novo token para continuar.", true);
@@ -879,6 +880,7 @@ function bindEvents() {
 
 			const savedSettings = await loadSavedSettings();
 			await initializeSettingsView(savedSettings);
+			PopupState.shouldReloadMetricsAfterTokenDeletion = true;
 			showSettingsView();
 			PopupRender.showSettingsStatus("Token excluido.");
 		}, "Falha ao excluir token.");
@@ -962,8 +964,23 @@ function bindEvents() {
 		showInitialView();
 	});
 
-	PopupDom.backFromSettingsButton.addEventListener("click", () => {
+	PopupDom.backFromSettingsButton.addEventListener("click", async () => {
 		showInitialView();
+
+		if (!PopupState.shouldReloadMetricsAfterTokenDeletion || !PopupState.hasCompleteSettings) {
+			return;
+		}
+
+		PopupState.shouldReloadMetricsAfterTokenDeletion = false;
+		await runSettingsAction(async () => {
+			PopupRender.showMetricsSkeleton();
+			const hasSprints = await loadSprints();
+			if (!hasSprints) {
+				PopupRender.showResult("Nenhuma sprint disponível para o contexto atual. Verifique as configurações do time/projeto.");
+				return;
+			}
+			await loadMetricsForCurrentSelection();
+		}, "Falha ao recarregar sprints e métricas após exclusão de token.");
 	});
 
 	PopupDom.backArrowButton.addEventListener("click", () => {
