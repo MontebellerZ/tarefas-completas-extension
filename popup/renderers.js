@@ -230,7 +230,7 @@ function getStateColor(state) {
 	if (value === "to refactor" || value === "approved" || value === "to do") return "var(--state-neutral)";
 	if (value === "to test") return "var(--state-test)";
 	if (value === "to release") return "var(--state-release)";
-	if (value === "to review") return "var(--state-review)";
+	if (value === "to merge") return "var(--state-review)";
 	if (value === "done") return "var(--state-done)";
 	return "#d0d0d4";
 }

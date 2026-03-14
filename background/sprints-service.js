@@ -213,7 +213,7 @@ async function collectMetrics(sprintId, includeCurrentDay) {
 
 	const pendingStates = new Set(["to do", "approved", "to refactor", "in progress", "pause"]);
 	const validatingStates = new Set(["to test"]);
-	const finishedStates = new Set(["to release", "to review", "done"]);
+	const finishedStates = new Set(["to release", "to merge", "done"]);
 
 	let pendingTasks = 0;
 	let validatingTasks = 0;
@@ -258,7 +258,7 @@ async function listSprintItemsByMetricBucket(sprintId, metricBucket) {
 	const bucket = String(metricBucket || "").trim().toLowerCase();
 	const pendingStates = new Set(["to do", "approved", "to refactor", "in progress", "pause"]);
 	const validatingStates = new Set(["to test"]);
-	const finishedStates = new Set(["to release", "to review", "done"]);
+	const finishedStates = new Set(["to release", "to merge", "done"]);
 
 	let filtered = [];
 	if (bucket === "started") {
