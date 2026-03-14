@@ -7,6 +7,28 @@ function openItemInAzure(url) {
 	window.open(url, "_blank", "noopener,noreferrer");
 }
 
+function getSelectedToken() {
+	return PopupState.availableTokens.find((token) => String(token.value) === String(PopupDom.tokenSelect.value || "")) || null;
+}
+
+function getSelectedTokenValue() {
+	return String(getSelectedToken()?.tokenValue || "").trim();
+}
+
+function clearTokenForm() {
+	PopupDom.tokenNameInput.value = "";
+	PopupDom.tokenValueInput.value = "";
+	PopupDom.tokenStatus.classList.add("hidden");
+}
+
+function showTokenSetupView(allowBack) {
+	PopupDom.initialView.classList.add("hidden");
+	PopupDom.settingsView.classList.add("hidden");
+	PopupDom.changesView.classList.add("hidden");
+	PopupDom.tokenSetupView.classList.remove("hidden");
+	PopupDom.backFromTokenButton.classList.toggle("hidden", !allowBack);
+}
+
 function showDetail(item) {
 	PopupState.lastWindowScrollTop =
 		window.scrollY ||
@@ -51,24 +73,43 @@ function showList() {
 }
 
 function showChangesView() {
+	if (!PopupState.availableTokens.length) {
+		showTokenSetupView(false);
+		return;
+	}
+
 	PopupDom.initialView.classList.add("hidden");
+	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.remove("hidden");
 }
 
 function showSettingsView() {
+	if (!PopupState.availableTokens.length) {
+		showTokenSetupView(false);
+		return;
+	}
+
 	PopupDom.initialView.classList.add("hidden");
+	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.settingsView.classList.remove("hidden");
 }
 
 function showInitialView() {
-	if (!PopupState.hasCompleteSettings) {
-		showSettingsView();
-		PopupRender.showSettingsStatus("Salve PAT, organizacao, projeto e time para acessar a tela inicial.", true);
+	if (!PopupState.availableTokens.length) {
+		showTokenSetupView(false);
+		PopupRender.showTokenStatus("Cadastre ao menos um token para continuar.", true);
 		return;
 	}
 
+	if (!PopupState.hasCompleteSettings) {
+		showSettingsView();
+		PopupRender.showSettingsStatus("Salve token, organizacao, projeto e time para acessar a tela inicial.", true);
+		return;
+	}
+
+	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.detailSection.classList.add("hidden");
@@ -95,19 +136,26 @@ function renderRecentList(items) {
 	PopupDom.recentSection.classList.remove("hidden");
 }
 
-function updateSettingsFormState() {
+function updateTokenFormState() {
 	const tokenName = PopupDom.tokenNameInput.value.trim();
 	const tokenValue = PopupDom.tokenValueInput.value.trim();
+	PopupDom.saveTokenButton.disabled = !(tokenName && tokenValue);
+	PopupDom.backFromTokenButton.classList.toggle("hidden", !PopupState.availableTokens.length);
+}
+
+function updateSettingsFormState() {
+	const tokenId = String(PopupDom.tokenSelect.value || "").trim();
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const projectId = String(PopupDom.projectSelect.value || "").trim();
 	const teamId = String(PopupDom.teamSelect.value || "").trim();
 
-	PopupDom.organizationSelect.disabled = !tokenValue;
+	PopupDom.tokenSelect.disabled = !PopupState.availableTokens.length;
+	PopupDom.deleteTokenButton.disabled = !tokenId;
+	PopupDom.organizationSelect.disabled = !tokenId;
 	PopupDom.projectSelect.disabled = !organization;
 	PopupDom.teamSelect.disabled = !projectId;
 	PopupDom.userSelect.disabled = !teamId;
-
-	PopupDom.saveSettingsButton.disabled = !(tokenName && tokenValue && organization && projectId && teamId);
+	PopupDom.saveSettingsButton.disabled = !(tokenId && organization && projectId && teamId);
 }
 
 async function loadSavedSettings() {
@@ -116,9 +164,19 @@ async function loadSavedSettings() {
 	return response;
 }
 
+async function loadTokens(selectedTokenId = "") {
+	const response = await PopupApi.listTokens();
+	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar tokens.");
+	PopupState.availableTokens = response.tokens || [];
+	const preferred = selectedTokenId || response.selectedTokenId || PopupState.availableTokens[0]?.value || "";
+	PopupRender.populateSelect(PopupDom.tokenSelect, PopupState.availableTokens, "Selecione um token", preferred);
+	updateTokenFormState();
+	updateSettingsFormState();
+}
+
 async function loadProjects(selectedProjectId = "", selectedTeamId = "", selectedUserId = "") {
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
-	const tokenValue = PopupDom.tokenValueInput.value.trim();
+	const tokenValue = getSelectedTokenValue();
 
 	if (!organization || !tokenValue) {
 		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
@@ -147,7 +205,7 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "", selecte
 }
 
 async function loadOrganizations(selectedOrganization = "") {
-	const tokenValue = PopupDom.tokenValueInput.value.trim();
+	const tokenValue = getSelectedTokenValue();
 
 	if (!tokenValue) {
 		PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", "");
@@ -160,9 +218,7 @@ async function loadOrganizations(selectedOrganization = "") {
 	}
 
 	const response = await PopupApi.listOrganizations(tokenValue);
-	if (!response?.ok) {
-		throw new Error(response?.error || "Falha ao carregar organizacoes.");
-	}
+	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar organizacoes.");
 
 	const options = [...(response.organizations || [])];
 	if (selectedOrganization && !options.some((entry) => String(entry.value) === String(selectedOrganization))) {
@@ -175,7 +231,7 @@ async function loadOrganizations(selectedOrganization = "") {
 
 async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamId = "", selectedUserId = "") {
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
-	const tokenValue = PopupDom.tokenValueInput.value.trim();
+	const tokenValue = getSelectedTokenValue();
 
 	if (!organization || !tokenValue || !projectId) {
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
@@ -202,7 +258,7 @@ async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamI
 
 async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = PopupDom.teamSelect.value, selectedUserId = "") {
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
-	const tokenValue = PopupDom.tokenValueInput.value.trim();
+	const tokenValue = getSelectedTokenValue();
 
 	if (!organization || !tokenValue || !projectId || !teamId) {
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
@@ -219,9 +275,8 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 	updateSettingsFormState();
 }
 
-async function saveSettings() {
-	const tokenName = PopupDom.tokenNameInput.value.trim();
-	const tokenValue = PopupDom.tokenValueInput.value.trim();
+async function saveCurrentSettings() {
+	const selectedToken = getSelectedToken();
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const projectId = PopupDom.projectSelect.value;
 	const teamId = PopupDom.teamSelect.value;
@@ -231,8 +286,7 @@ async function saveSettings() {
 	const selectedUser = PopupState.availableUsers.find((user) => String(user.value) === String(selectedUserId));
 
 	const response = await PopupApi.saveSettings({
-		tokenName,
-		tokenValue,
+		selectedTokenId: selectedToken?.id || selectedToken?.value || PopupDom.tokenSelect.value,
 		organization,
 		projectId,
 		projectName,
@@ -247,9 +301,21 @@ async function saveSettings() {
 	if (!response?.ok) throw new Error(response?.error || "Falha ao salvar configuracoes.");
 }
 
-async function clearAllUserData() {
-	const response = await PopupApi.clearUserData();
-	if (!response?.ok) throw new Error(response?.error || "Falha ao limpar dados.");
+async function saveCurrentToken() {
+	const response = await PopupApi.saveToken({
+		name: PopupDom.tokenNameInput.value.trim(),
+		value: PopupDom.tokenValueInput.value.trim(),
+	});
+	if (!response?.ok) throw new Error(response?.error || "Falha ao salvar token.");
+	return response;
+}
+
+async function deleteCurrentToken() {
+	const tokenId = String(PopupDom.tokenSelect.value || "").trim();
+	if (!tokenId) return { hasTokens: PopupState.availableTokens.length > 0 };
+	const response = await PopupApi.deleteToken(tokenId);
+	if (!response?.ok) throw new Error(response?.error || "Falha ao excluir token.");
+	return response;
 }
 
 async function loadSprints() {
@@ -281,6 +347,7 @@ async function loadRecentChanges() {
 
 async function initializeSettingsView(savedSettings) {
 	PopupRender.applySettingsToInputs(savedSettings);
+	await loadTokens(savedSettings.selectedTokenId || "");
 	PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", savedSettings.organization || "");
 	PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 	PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
@@ -288,11 +355,11 @@ async function initializeSettingsView(savedSettings) {
 	PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", selectedUserValue);
 	PopupState.availableUsers = [];
 
-	if (savedSettings.organization && savedSettings.tokenValue) {
+	if (PopupState.availableTokens.length && savedSettings.selectedTokenId) {
 		await loadOrganizations(savedSettings.organization || "");
-		await loadProjects(savedSettings.projectId || "", savedSettings.teamId || "", selectedUserValue);
-	} else if (savedSettings.tokenValue) {
-		await loadOrganizations("");
+		if (savedSettings.organization) {
+			await loadProjects(savedSettings.projectId || "", savedSettings.teamId || "", selectedUserValue);
+		}
 	}
 
 	updateSettingsFormState();
@@ -307,20 +374,89 @@ async function runSettingsAction(action, fallbackMessage) {
 	}
 }
 
+async function runTokenAction(action, fallbackMessage) {
+	PopupDom.tokenStatus.classList.add("hidden");
+	try {
+		await action();
+	} catch (error) {
+		PopupRender.showTokenStatus(`Erro: ${error instanceof Error ? error.message : fallbackMessage}`, true);
+	}
+}
+
 function bindEvents() {
 	PopupDom.tokenNameInput.addEventListener("input", () => {
-		updateSettingsFormState();
+		updateTokenFormState();
 	});
 
 	PopupDom.tokenValueInput.addEventListener("input", () => {
-		updateSettingsFormState();
+		updateTokenFormState();
 	});
 
-	PopupDom.tokenValueInput.addEventListener("change", async () => {
+	PopupDom.backFromTokenButton.addEventListener("click", () => {
+		if (!PopupState.availableTokens.length) {
+			showTokenSetupView(false);
+			return;
+		}
+		showSettingsView();
+	});
+
+	PopupDom.saveTokenButton.addEventListener("click", async () => {
+		PopupDom.saveTokenButton.disabled = true;
+		PopupRender.showTokenStatus("Salvando token...");
+		await runTokenAction(async () => {
+			const response = await saveCurrentToken();
+			clearTokenForm();
+			const savedSettings = await loadSavedSettings();
+			await initializeSettingsView(savedSettings);
+			showSettingsView();
+			PopupRender.showSettingsStatus("Token salvo. Configure organizacao, projeto e time.");
+			if (response?.tokenId) {
+				PopupDom.tokenSelect.value = response.tokenId;
+			}
+		}, "Falha ao salvar token.");
+		updateTokenFormState();
+	});
+
+	PopupDom.tokenSelect.addEventListener("change", async () => {
+		updateSettingsFormState();
 		await runSettingsAction(async () => {
-			await loadOrganizations();
+			await loadOrganizations("");
 			await loadProjects();
 		}, "Falha ao carregar organizacoes/projetos.");
+	});
+
+	PopupDom.addTokenButton.addEventListener("click", () => {
+		clearTokenForm();
+		showTokenSetupView(PopupState.availableTokens.length > 0);
+		updateTokenFormState();
+	});
+
+	PopupDom.deleteTokenButton.addEventListener("click", async () => {
+		const selectedToken = getSelectedToken();
+		if (!selectedToken) return;
+		const confirmed = window.confirm(`Deseja realmente excluir o token \"${selectedToken.name}\"?`);
+		if (!confirmed) return;
+
+		PopupDom.deleteTokenButton.disabled = true;
+		await runSettingsAction(async () => {
+			const response = await deleteCurrentToken();
+			if (!response.hasTokens) {
+				PopupState.availableTokens = [];
+				PopupState.hasCompleteSettings = false;
+				clearTokenForm();
+				showTokenSetupView(false);
+				PopupRender.showTokenStatus("Cadastre um novo token para continuar.", true);
+				updateTokenFormState();
+				updateSettingsFormState();
+				return;
+			}
+
+			const savedSettings = await loadSavedSettings();
+			await initializeSettingsView(savedSettings);
+			showSettingsView();
+			PopupRender.showSettingsStatus("Token excluido.");
+		}, "Falha ao excluir token.");
+		updateSettingsFormState();
 	});
 
 	PopupDom.organizationSelect.addEventListener("change", async () => {
@@ -373,6 +509,10 @@ function bindEvents() {
 	});
 
 	PopupDom.settingsButton.addEventListener("click", async () => {
+		if (!PopupState.availableTokens.length) {
+			showTokenSetupView(false);
+			return;
+		}
 		showSettingsView();
 		await runSettingsAction(async () => {
 			const savedSettings = await loadSavedSettings();
@@ -397,13 +537,12 @@ function bindEvents() {
 	});
 
 	PopupDom.saveSettingsButton.addEventListener("click", async () => {
-		const tokenName = PopupDom.tokenNameInput.value.trim();
-		const tokenValue = PopupDom.tokenValueInput.value.trim();
+		const tokenId = String(PopupDom.tokenSelect.value || "").trim();
 		const organization = String(PopupDom.organizationSelect.value || "").trim();
 		const projectId = PopupDom.projectSelect.value;
 		const teamId = PopupDom.teamSelect.value;
 
-		if (!tokenName || !tokenValue || !organization || !projectId || !teamId) {
+		if (!tokenId || !organization || !projectId || !teamId) {
 			PopupRender.showSettingsStatus("Preencha token, organizacao, projeto e time para salvar.", true);
 			return;
 		}
@@ -411,31 +550,13 @@ function bindEvents() {
 		PopupDom.saveSettingsButton.disabled = true;
 		PopupRender.showSettingsStatus("Salvando configuracoes...");
 
-		try {
-			await saveSettings();
+		await runSettingsAction(async () => {
+			await saveCurrentSettings();
 			PopupState.hasCompleteSettings = true;
-			PopupRender.updateClearButtonVisibility(true);
 			await loadSprints();
 			showInitialView();
-		} catch (error) {
-			PopupRender.showSettingsStatus(`Erro: ${error instanceof Error ? error.message : "Falha ao salvar configuracoes."}`, true);
-		} finally {
-			updateSettingsFormState();
-		}
-	});
-
-	PopupDom.clearSettingsButton.addEventListener("click", async () => {
-		PopupDom.clearSettingsButton.disabled = true;
-		PopupRender.showSettingsStatus("Limpando dados...");
-
-		try {
-			await clearAllUserData();
-			window.location.reload();
-		} catch (error) {
-			PopupRender.showSettingsStatus(`Erro: ${error instanceof Error ? error.message : "Falha ao limpar dados."}`, true);
-		} finally {
-			PopupDom.clearSettingsButton.disabled = false;
-		}
+		}, "Falha ao salvar configuracoes.");
+		updateSettingsFormState();
 	});
 }
 
@@ -443,12 +564,22 @@ async function init() {
 	PopupDom.runButton.disabled = true;
 	try {
 		const savedSettings = await loadSavedSettings();
+		await loadTokens(savedSettings.selectedTokenId || "");
+
+		if (!PopupState.availableTokens.length) {
+			PopupState.hasCompleteSettings = false;
+			clearTokenForm();
+			showTokenSetupView(false);
+			PopupRender.showTokenStatus("Cadastre ao menos um token para continuar.", true);
+			return;
+		}
+
 		await initializeSettingsView(savedSettings);
 
 		if (!PopupRender.isCompleteSettings(savedSettings)) {
 			PopupState.hasCompleteSettings = false;
 			showSettingsView();
-			PopupRender.showSettingsStatus("Configure PAT, organizacao, projeto e time para comecar.");
+			PopupRender.showSettingsStatus("Configure token, organizacao, projeto e time para comecar.");
 			return;
 		}
 
@@ -458,6 +589,7 @@ async function init() {
 		PopupRender.showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao carregar a extensao."}`);
 	} finally {
 		PopupDom.runButton.disabled = false;
+		updateTokenFormState();
 		updateSettingsFormState();
 	}
 }

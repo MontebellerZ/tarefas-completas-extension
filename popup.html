@@ -37,12 +37,12 @@
         <button id="recentButton" type="button">Alterações recentes</button>
       </section>
 
-      <section id="settingsView" class="view hidden">
+      <section id="tokenSetupView" class="view hidden">
         <div class="changes-header">
-          <button id="backFromSettingsButton" type="button" class="back-arrow" aria-label="Voltar para tela inicial">
+          <button id="backFromTokenButton" type="button" class="back-arrow hidden" aria-label="Voltar para configurações">
             <span class="back-arrow-icon">➜</span>
           </button>
-          <h2>Configurações</h2>
+          <h2>Cadastro de Token</h2>
         </div>
 
         <div class="field-group">
@@ -53,6 +53,27 @@
         <div class="field-group">
           <label for="tokenValueInput">Valor do token (PAT)</label>
           <input id="tokenValueInput" type="password" placeholder="Cole aqui o PAT" />
+        </div>
+
+        <button id="saveTokenButton" type="button">Salvar token</button>
+        <section id="tokenStatus" class="result hidden" aria-live="polite"></section>
+      </section>
+
+      <section id="settingsView" class="view hidden">
+        <div class="changes-header">
+          <button id="backFromSettingsButton" type="button" class="back-arrow" aria-label="Voltar para tela inicial">
+            <span class="back-arrow-icon">➜</span>
+          </button>
+          <h2>Configurações</h2>
+        </div>
+
+        <div class="field-group">
+          <label for="tokenSelect">Token</label>
+          <div class="token-select-row">
+            <select id="tokenSelect"></select>
+            <button id="addTokenButton" type="button" class="icon-action-button" aria-label="Adicionar token" title="Adicionar token">+</button>
+            <button id="deleteTokenButton" type="button" class="icon-action-button delete-button" aria-label="Excluir token" title="Excluir token">🗑</button>
+          </div>
         </div>
 
         <div class="field-group">
@@ -76,8 +97,7 @@
         </div>
 
         <div class="settings-actions-row">
-          <button id="saveSettingsButton" type="button">Salvar token</button>
-          <button id="clearSettingsButton" type="button">Limpar dados</button>
+          <button id="saveSettingsButton" type="button">Salvar configurações</button>
         </div>
         <section id="settingsStatus" class="result hidden" aria-live="polite"></section>
       </section>

@@ -9,6 +9,12 @@ function showSettingsStatus(text, isError = false) {
 	PopupDom.settingsStatus.style.borderLeftColor = isError ? "#d13438" : "#107c10";
 }
 
+function showTokenStatus(text, isError = false) {
+	PopupDom.tokenStatus.textContent = text;
+	PopupDom.tokenStatus.classList.remove("hidden");
+	PopupDom.tokenStatus.style.borderLeftColor = isError ? "#d13438" : "#107c10";
+}
+
 function populateSelect(selectElement, options, placeholder, selectedValue = "") {
 	selectElement.innerHTML = "";
 	const placeholderOption = document.createElement("option");
@@ -26,13 +32,9 @@ function populateSelect(selectElement, options, placeholder, selectedValue = "")
 	selectElement.value = selectedValue || "";
 }
 
-function updateClearButtonVisibility(hasAnySavedData) {
-	PopupDom.clearSettingsButton.classList.toggle("hidden", !hasAnySavedData);
-}
-
 function isCompleteSettings(settings) {
 	return Boolean(
-		settings.tokenValue &&
+		settings.selectedTokenId &&
 			settings.organization &&
 			settings.projectId &&
 			settings.projectName &&
@@ -42,21 +44,13 @@ function isCompleteSettings(settings) {
 }
 
 function applySettingsToInputs(settings) {
-	PopupDom.tokenNameInput.value = settings.tokenName || "";
-	PopupDom.tokenValueInput.value = settings.tokenValue || "";
 	if (PopupDom.organizationSelect) {
 		PopupDom.organizationSelect.value = settings.organization || "";
 	}
+	if (PopupDom.tokenSelect) {
+		PopupDom.tokenSelect.value = settings.selectedTokenId || "";
+	}
 	PopupState.hasCompleteSettings = isCompleteSettings(settings);
-	updateClearButtonVisibility(
-		Boolean(
-			settings.tokenName ||
-				settings.tokenValue ||
-				settings.organization ||
-				settings.projectId ||
-				settings.teamId,
-		),
-	);
 }
 
 function normalizeType(type) {
@@ -170,9 +164,9 @@ function formatMetrics(metrics) {
 window.PopupRender = {
 	showResult,
 	showSettingsStatus,
+	showTokenStatus,
 	populateSelect,
 	populateSprintSelect,
-	updateClearButtonVisibility,
 	isCompleteSettings,
 	applySettingsToInputs,
 	buildItemCard,

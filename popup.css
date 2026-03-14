@@ -52,6 +52,16 @@ body {
   flex: 1;
 }
 
+.token-select-row {
+  display: flex;
+  gap: 8px;
+  align-items: stretch;
+}
+
+.token-select-row select {
+  flex: 1;
+}
+
 h1 {
   margin: 0;
   font-size: 16px;
@@ -83,6 +93,21 @@ h1 {
   background: #eef2f8;
   color: #8ba4be;
   cursor: wait;
+}
+
+.icon-action-button {
+  width: 40px;
+  min-width: 40px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  line-height: 1;
+}
+
+.delete-button {
+  background: #d13438;
 }
 
 label {

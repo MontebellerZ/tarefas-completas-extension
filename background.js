@@ -11,6 +11,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 	const allowed = new Set([
 		"getSettings",
 		"saveSettings",
+		"listTokens",
+		"saveToken",
+		"deleteToken",
 		"clearUserData",
 		"listOrganizations",
 		"listProjects",
@@ -28,6 +31,15 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 			switch (message.action) {
 				case "getSettings":
 					sendResponse({ ok: true, ...(await getSettings()) });
+					break;
+				case "listTokens":
+					sendResponse({ ok: true, ...(await listTokens()) });
+					break;
+				case "saveToken":
+					sendResponse({ ok: true, ...(await saveToken(message.token || {})) });
+					break;
+				case "deleteToken":
+					sendResponse({ ok: true, ...(await deleteToken(message.tokenId)) });
 					break;
 				case "listOrganizations":
 					sendResponse({ ok: true, ...(await listOrganizations(message.tokenValue)) });

@@ -19,8 +19,8 @@ const TTL = {
 };
 
 const DEFAULT_SETTINGS = {
-	tokenName: "",
-	tokenValue: "",
+	tokens: [],
+	selectedTokenId: "",
 	organization: "",
 	projectId: "",
 	projectName: "",
