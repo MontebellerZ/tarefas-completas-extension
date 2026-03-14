@@ -20,6 +20,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		"listTeams",
 		"listUsers",
 		"listSprints",
+		"listProjectWorkItemStates",
+		"getProjectStatusMapping",
+		"saveProjectStatusMapping",
 		"openAzureAndCollect",
 		"listSprintItemsByMetricBucket",
 		"listRecentChanges",
@@ -66,6 +69,45 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 				case "listSprints":
 					sendResponse({ ok: true, ...(await listSprints()) });
 					break;
+				case "listProjectWorkItemStates": {
+					const settings = await getSettings();
+					const organization = normalizeOrganization(message.organization || settings.organization);
+					const projectId = String(message.projectId || settings.projectId || "").trim();
+					const projectName = String(message.projectName || settings.projectName || "").trim();
+					const discovery = await listProjectWorkItemStates(organization, projectName, message.tokenValue || settings.tokenValue);
+
+					let statusMapping = null;
+					if (projectId) {
+						statusMapping = await saveProjectStatusDiscovery({
+							organization,
+							projectId,
+							workItemTypes: discovery.workItemTypes,
+							availableStates: discovery.availableStates,
+						});
+					}
+
+					sendResponse({ ok: true, ...discovery, statusMapping });
+					break;
+				}
+				case "getProjectStatusMapping": {
+					const settings = await getSettings();
+					const organization = normalizeOrganization(message.organization || settings.organization);
+					const projectId = String(message.projectId || settings.projectId || "").trim();
+					sendResponse({ ok: true, mapping: await getProjectStatusMapping(organization, projectId) });
+					break;
+				}
+				case "saveProjectStatusMapping": {
+					const settings = await getSettings();
+					const organization = normalizeOrganization(message.organization || settings.organization);
+					const projectId = String(message.projectId || settings.projectId || "").trim();
+					const mapping = await saveProjectStatusMapping({
+						...(message.mapping || {}),
+						organization,
+						projectId,
+					});
+					sendResponse({ ok: true, mapping });
+					break;
+				}
 				case "openAzureAndCollect":
 					sendResponse({
 						ok: true,

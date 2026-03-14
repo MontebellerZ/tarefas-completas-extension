@@ -116,6 +116,37 @@
           <select id="userSelect"></select>
         </div>
 
+        <section id="statusMappingSection" class="status-mapping-section">
+          <h3>Mapeamento de status do projeto</h3>
+          <p class="status-mapping-description">
+            Configure manualmente quais status do projeto representam tarefas em andamento, validação e finalizadas.
+          </p>
+
+          <div class="status-chip-pool-wrapper">
+            <label>Status disponíveis</label>
+            <div id="statusPool" class="status-chip-pool status-drop-zone" data-zone="pool"></div>
+          </div>
+
+          <div class="status-drop-zones-grid">
+            <div class="status-drop-zone-wrapper">
+              <h4>Andamento</h4>
+              <div id="pendingDropZone" class="status-drop-zone" data-zone="pending"></div>
+            </div>
+
+            <div class="status-drop-zone-wrapper">
+              <h4>Validando</h4>
+              <div id="validatingDropZone" class="status-drop-zone" data-zone="validating"></div>
+            </div>
+
+            <div class="status-drop-zone-wrapper">
+              <h4>Finalizadas</h4>
+              <div id="finishedDropZone" class="status-drop-zone" data-zone="finished"></div>
+            </div>
+          </div>
+
+          <section id="statusMappingStatus" class="result hidden" aria-live="polite"></section>
+        </section>
+
         <div class="settings-actions-row">
           <button id="saveSettingsButton" type="button">Salvar configurações</button>
         </div>

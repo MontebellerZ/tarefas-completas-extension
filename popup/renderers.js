@@ -225,6 +225,10 @@ function normalizeType(type) {
 
 function getStateColor(state) {
 	const value = String(state || "").trim().toLowerCase();
+	const mappedColor = String(PopupState?.currentProjectStatusMapping?.stateColors?.[value] || "").trim().toLowerCase();
+	if (/^#[0-9a-f]{6}$/.test(mappedColor)) {
+		return mappedColor;
+	}
 	if (value === "pause") return "var(--state-pause)";
 	if (value === "in progress" || value === "doing") return "var(--state-inprogress)";
 	if (value === "to refactor" || value === "approved" || value === "to do") return "var(--state-neutral)";

@@ -44,6 +44,8 @@ const TOKEN_SCOPED_FIELDS = [
 	"selectedUserDescriptor",
 ];
 
+const STATUS_MAPPING_BUCKETS = ["pending", "validating", "finished"];
+
 function getEmptyTokenScopedSettings() {
 	return {
 		organization: "",
@@ -102,6 +104,114 @@ function normalizeTokenConfigurations(rawConfigurations, tokens, fallbackScoped,
 	return normalized;
 }
 
+function normalizeStatusValues(rawValues) {
+	if (!Array.isArray(rawValues)) return [];
+	const seen = new Set();
+	const normalized = [];
+
+	for (const value of rawValues) {
+		const text = String(value || "").trim();
+		if (!text) continue;
+		const key = text.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		normalized.push(text);
+	}
+
+	return normalized;
+}
+
+function normalizeStatusBuckets(rawBuckets = {}) {
+	const normalized = {
+		pending: [],
+		validating: [],
+		finished: [],
+	};
+
+	for (const bucket of STATUS_MAPPING_BUCKETS) {
+		normalized[bucket] = normalizeStatusValues(rawBuckets?.[bucket]);
+	}
+
+	return normalized;
+}
+
+function normalizeHexColor(value) {
+	const text = String(value || "").trim();
+	if (/^#[0-9a-fA-F]{6}$/.test(text)) {
+		return text.toLowerCase();
+	}
+	return "";
+}
+
+function normalizeStatusColorMap(rawColors = {}) {
+	const source = rawColors && typeof rawColors === "object" ? rawColors : {};
+	const normalized = {};
+
+	for (const [stateKey, colorValue] of Object.entries(source)) {
+		const key = String(stateKey || "").trim().toLowerCase();
+		if (!key) continue;
+		const color = normalizeHexColor(colorValue);
+		if (!color) continue;
+		normalized[key] = color;
+	}
+
+	return normalized;
+}
+
+function normalizeStatusColorOverrides(rawOverrides = {}) {
+	const source = rawOverrides && typeof rawOverrides === "object" ? rawOverrides : {};
+	const normalized = {};
+
+	for (const [stateKey, value] of Object.entries(source)) {
+		const key = String(stateKey || "").trim().toLowerCase();
+		if (!key) continue;
+		normalized[key] = Boolean(value);
+	}
+
+	return normalized;
+}
+
+function normalizeProjectStatusMappingEntry(rawEntry = {}) {
+	const stateColors = normalizeStatusColorMap(rawEntry?.stateColors || {});
+	const statusColorOverrides = normalizeStatusColorOverrides(rawEntry?.statusColorOverrides || {});
+
+	for (const stateKey of Object.keys(statusColorOverrides)) {
+		if (!stateColors[stateKey]) {
+			delete statusColorOverrides[stateKey];
+		}
+	}
+
+	return {
+		configured: Boolean(rawEntry?.configured),
+		buckets: normalizeStatusBuckets(rawEntry?.buckets || {}),
+		stateColors,
+		statusColorOverrides,
+		availableStates: normalizeStatusValues(rawEntry?.availableStates),
+		workItemTypes: normalizeStatusValues(rawEntry?.workItemTypes),
+		updatedAt: Number(rawEntry?.updatedAt || 0),
+	};
+}
+
+function normalizeProjectStatusMappings(rawMappings) {
+	const source = rawMappings && typeof rawMappings === "object" ? rawMappings : {};
+	const normalized = {};
+
+	for (const [projectKey, mappingEntry] of Object.entries(source)) {
+		const key = String(projectKey || "").trim();
+		if (!key) continue;
+		normalized[key] = normalizeProjectStatusMappingEntry(mappingEntry);
+	}
+
+	return normalized;
+}
+
+function buildProjectStatusKey(organization, projectId) {
+	const org = normalizeOrganization(organization);
+	const project = String(projectId || "").trim();
+	if (!org || !project) return "";
+	return `${org.toLowerCase()}|${project.toLowerCase()}`;
+}
+
 function normalizeStoredSettings(rawSettings = {}) {
 	const base = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
 	let tokens = sanitizeTokens(base.tokens);
@@ -119,6 +229,7 @@ function normalizeStoredSettings(rawSettings = {}) {
 	const selectedTokenId = String(base.selectedTokenId || tokens[0]?.id || "").trim();
 	const selectedToken = tokens.find((token) => token.id === selectedTokenId) || tokens[0] || null;
 	const tokenConfigurations = normalizeTokenConfigurations(base.tokenConfigurations, tokens, base, selectedToken?.id || "");
+	const statusMappingsByProject = normalizeProjectStatusMappings(base.statusMappingsByProject);
 	const selectedScoped = selectTokenScopedSettings({ tokenConfigurations }, selectedToken?.id || "");
 
 	return applyScopedToSettings({
@@ -128,6 +239,7 @@ function normalizeStoredSettings(rawSettings = {}) {
 		tokenName: selectedToken?.name || "",
 		tokenValue: selectedToken?.value || "",
 		tokenConfigurations,
+		statusMappingsByProject,
 	}, selectedScoped);
 }
 
@@ -261,4 +373,76 @@ function ensureRequiredSettings(settings) {
 
 function contextCacheKey(settings) {
 	return `${settings.selectedTokenId || "no-token"}|${settings.organization}|${settings.projectId}|${settings.teamId}|${settings.selectedUserId || settings.selectedUserUniqueName || "me"}`;
+}
+
+function getProjectStatusMappingEntry(settings, organization, projectId) {
+	const projectKey = buildProjectStatusKey(organization, projectId);
+	if (!projectKey) {
+		return normalizeProjectStatusMappingEntry({ configured: false, buckets: {} });
+	}
+
+	const entry = settings?.statusMappingsByProject?.[projectKey] || {};
+	return normalizeProjectStatusMappingEntry(entry);
+}
+
+async function getProjectStatusMapping(organization, projectId) {
+	const settings = await getSettings();
+	return getProjectStatusMappingEntry(settings, organization, projectId);
+}
+
+async function saveProjectStatusMapping(payload = {}) {
+	const current = normalizeStoredSettings(await getStoredSettingsValue());
+	const organization = normalizeOrganization(payload.organization || current.organization);
+	const projectId = String(payload.projectId || current.projectId || "").trim();
+	const projectKey = buildProjectStatusKey(organization, projectId);
+	if (!projectKey) {
+		throw new Error("Informe organização e projeto para salvar o mapeamento de status.");
+	}
+
+	const nextMappings = {
+		...(current.statusMappingsByProject || {}),
+	};
+
+	nextMappings[projectKey] = normalizeProjectStatusMappingEntry({
+		...(nextMappings[projectKey] || {}),
+		...(payload || {}),
+		updatedAt: Date.now(),
+	});
+
+	const nextSettings = {
+		...current,
+		statusMappingsByProject: nextMappings,
+	};
+
+	await persistSettings(nextSettings);
+	return nextMappings[projectKey];
+}
+
+async function saveProjectStatusDiscovery(payload = {}) {
+	const current = normalizeStoredSettings(await getStoredSettingsValue());
+	const organization = normalizeOrganization(payload.organization || current.organization);
+	const projectId = String(payload.projectId || current.projectId || "").trim();
+	const projectKey = buildProjectStatusKey(organization, projectId);
+	if (!projectKey) {
+		throw new Error("Informe organização e projeto para salvar os estados descobertos.");
+	}
+
+	const previousEntry = normalizeProjectStatusMappingEntry(current.statusMappingsByProject?.[projectKey] || {});
+	const nextEntry = normalizeProjectStatusMappingEntry({
+		...previousEntry,
+		availableStates: payload.availableStates,
+		workItemTypes: payload.workItemTypes,
+		updatedAt: Date.now(),
+	});
+
+	const nextSettings = {
+		...current,
+		statusMappingsByProject: {
+			...(current.statusMappingsByProject || {}),
+			[projectKey]: nextEntry,
+		},
+	};
+
+	await persistSettings(nextSettings);
+	return nextEntry;
 }

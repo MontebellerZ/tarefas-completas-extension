@@ -22,6 +22,7 @@ const DEFAULT_SETTINGS = {
 	tokens: [],
 	selectedTokenId: "",
 	tokenConfigurations: {},
+	statusMappingsByProject: {},
 	organization: "",
 	projectId: "",
 	projectName: "",

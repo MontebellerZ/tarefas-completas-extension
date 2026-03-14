@@ -318,6 +318,73 @@ async function listUsers(organization, projectId, teamId, tokenValue) {
 	};
 }
 
+async function listProjectWorkItemStates(organization, projectName, tokenValue) {
+	const saved = await getSettings();
+	const org = normalizeOrganization(organization || saved.organization);
+	const project = String(projectName || saved.projectName || "").trim();
+	const effectiveTokenValue = String(tokenValue || saved.tokenValue || "").trim();
+
+	if (!org || !project) {
+		throw new Error("Informe organização e projeto para descobrir os status do work item.");
+	}
+
+	const typesResponse = await azureFetchJson(
+		`https://dev.azure.com/${encodePathPart(org)}/${encodePathPart(project)}/_apis/wit/workitemtypes?api-version=${API_VERSION}`,
+		{ tokenValue: effectiveTokenValue },
+	);
+
+	const workItemTypes = (typesResponse.value || [])
+		.map((type) => String(type?.name || "").trim())
+		.filter(Boolean)
+		.filter((typeName) => {
+			const normalized = typeName.toLowerCase();
+			return normalized === "task" || normalized === "bug";
+		})
+		.sort((left, right) => left.localeCompare(right, "pt-BR", { sensitivity: "base" }));
+
+	if (!workItemTypes.length) {
+		throw new Error("Não foi possível localizar os tipos Task/Bug para o projeto selecionado.");
+	}
+
+	const statesByType = await Promise.all(
+		workItemTypes.map(async (typeName) => {
+			const statesResponse = await azureFetchJson(
+				`https://dev.azure.com/${encodePathPart(org)}/${encodePathPart(project)}/_apis/wit/workitemtypes/${encodePathPart(typeName)}/states?api-version=${API_VERSION}`,
+				{ tokenValue: effectiveTokenValue },
+			);
+
+			return (statesResponse.value || []).map((state) => ({
+				type: typeName,
+				name: String(state?.name || "").trim(),
+				category: String(state?.category || "").trim(),
+				color: String(state?.color || "").trim(),
+			}));
+		}),
+	);
+
+	const flatStates = statesByType.flat().filter((state) => Boolean(state.name));
+	const byStateName = new Map();
+	for (const state of flatStates) {
+		const key = state.name.toLowerCase();
+		if (!byStateName.has(key)) {
+			byStateName.set(key, state.name);
+		}
+	}
+
+	const availableStates = [...byStateName.values()].sort((left, right) =>
+		left.localeCompare(right, "pt-BR", { sensitivity: "base" }),
+	);
+
+	return {
+		organization: org,
+		projectName: project,
+		workItemTypes,
+		availableStates,
+		states: flatStates,
+		discoveredAt: Date.now(),
+	};
+}
+
 async function runWiql(settings, wiqlQuery) {
 	const response = await azureFetchJson(
 		`https://dev.azure.com/${encodePathPart(settings.organization)}/${encodePathPart(settings.projectName)}/_apis/wit/wiql?api-version=${API_VERSION}`,

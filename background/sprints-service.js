@@ -199,6 +199,26 @@ async function listSprints() {
 	};
 }
 
+function getConfiguredStatusSets(settings) {
+	const mapping = getProjectStatusMappingEntry(settings, settings.organization, settings.projectId);
+	if (!mapping?.configured) {
+		throw new Error("Mapeamento de status pendente para este projeto. Configure os buckets em Configurações.");
+	}
+
+	const toSet = (values) =>
+		new Set(
+			(values || [])
+				.map((entry) => String(entry || "").trim().toLowerCase())
+				.filter(Boolean),
+		);
+
+	return {
+		pendingStates: toSet(mapping.buckets?.pending),
+		validatingStates: toSet(mapping.buckets?.validating),
+		finishedStates: toSet(mapping.buckets?.finished),
+	};
+}
+
 async function collectMetrics(sprintId, includeCurrentDay) {
 	const dataset = await loadSprintDataset();
 	const sprint = dataset.sprints.find((item) => String(item.id) === String(sprintId));
@@ -211,9 +231,7 @@ async function collectMetrics(sprintId, includeCurrentDay) {
 	const consideredDays = countElapsedWorkingDays(sprint, includeCurrentDay);
 	const dailyAverage = consideredDays > 0 ? sumHours / consideredDays : 0;
 
-	const pendingStates = new Set(["to do", "approved", "to refactor", "in progress", "pause"]);
-	const validatingStates = new Set(["to test"]);
-	const finishedStates = new Set(["to release", "to merge", "done"]);
+	const { pendingStates, validatingStates, finishedStates } = getConfiguredStatusSets(dataset.settings);
 
 	let pendingTasks = 0;
 	let validatingTasks = 0;
@@ -256,9 +274,7 @@ async function listSprintItemsByMetricBucket(sprintId, metricBucket) {
 	}
 
 	const bucket = String(metricBucket || "").trim().toLowerCase();
-	const pendingStates = new Set(["to do", "approved", "to refactor", "in progress", "pause"]);
-	const validatingStates = new Set(["to test"]);
-	const finishedStates = new Set(["to release", "to merge", "done"]);
+	const { pendingStates, validatingStates, finishedStates } = getConfiguredStatusSets(dataset.settings);
 
 	let filtered = [];
 	if (bucket === "started") {

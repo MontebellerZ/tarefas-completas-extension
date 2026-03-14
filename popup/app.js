@@ -26,12 +26,337 @@ const LIST_MODE_EMPTY_MESSAGES = {
 	"metric:finished": "Nenhuma tarefa finalizada encontrada para a sprint selecionada.",
 };
 
+const STATUS_REGION_DEFAULT_COLORS = {
+	pool: "#6b7280",
+	pending: "#0f6cbd",
+	validating: "#b58900",
+	finished: "#0f7a31",
+};
+
 function getListTitleByMode(mode) {
 	return LIST_MODE_TITLES[mode] || LIST_MODE_TITLES.recent;
 }
 
 function getListEmptyMessageByMode(mode) {
 	return LIST_MODE_EMPTY_MESSAGES[mode] || LIST_MODE_EMPTY_MESSAGES.recent;
+}
+
+function normalizeStatusValues(values) {
+	if (!Array.isArray(values)) return [];
+	const seen = new Set();
+	const normalized = [];
+	for (const value of values) {
+		const text = String(value || "").trim();
+		if (!text) continue;
+		const key = text.toLowerCase();
+		if (seen.has(key)) continue;
+		seen.add(key);
+		normalized.push(text);
+	}
+	return normalized;
+}
+
+function normalizeStatusMapping(mapping = {}) {
+	return {
+		configured: Boolean(mapping?.configured),
+		buckets: {
+			pending: normalizeStatusValues(mapping?.buckets?.pending),
+			validating: normalizeStatusValues(mapping?.buckets?.validating),
+			finished: normalizeStatusValues(mapping?.buckets?.finished),
+		},
+		stateColors: Object.fromEntries(
+			Object.entries(mapping?.stateColors || {}).filter(([key, value]) => {
+				const normalizedKey = String(key || "").trim().toLowerCase();
+				const normalizedColor = String(value || "").trim().toLowerCase();
+				return Boolean(normalizedKey && /^#[0-9a-f]{6}$/.test(normalizedColor));
+			}),
+		),
+		statusColorOverrides: Object.fromEntries(
+			Object.entries(mapping?.statusColorOverrides || {}).map(([key, value]) => [String(key || "").trim().toLowerCase(), Boolean(value)]),
+		),
+		availableStates: normalizeStatusValues(mapping?.availableStates),
+		workItemTypes: normalizeStatusValues(mapping?.workItemTypes),
+		updatedAt: Number(mapping?.updatedAt || 0),
+	};
+}
+
+function isStatusMappingConfigured(mapping) {
+	const normalized = normalizeStatusMapping(mapping || {});
+	return Boolean(normalized.configured);
+}
+
+function createEmptyStatusMappingDraft() {
+	return {
+		pool: [],
+		pending: [],
+		validating: [],
+		finished: [],
+		stateColors: {},
+		statusColorOverrides: {},
+	};
+}
+
+function getRegionDefaultColor(zoneKey) {
+	return STATUS_REGION_DEFAULT_COLORS[zoneKey] || STATUS_REGION_DEFAULT_COLORS.pool;
+}
+
+function getStateColorKey(stateName) {
+	return String(stateName || "").trim().toLowerCase();
+}
+
+function getStatusZoneByName(statusName, draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft()) {
+	const key = getStateColorKey(statusName);
+	if (!key) return "pool";
+	for (const zone of ["pending", "validating", "finished"]) {
+		if ((draft[zone] || []).some((entry) => getStateColorKey(entry) === key)) {
+			return zone;
+		}
+	}
+	return "pool";
+}
+
+function getDraftStatusColor(statusName, draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft()) {
+	const key = getStateColorKey(statusName);
+	if (!key) return getRegionDefaultColor("pool");
+	const explicitColor = String(draft.stateColors?.[key] || "").trim().toLowerCase();
+	if (/^#[0-9a-f]{6}$/.test(explicitColor)) {
+		return explicitColor;
+	}
+	return getRegionDefaultColor(getStatusZoneByName(statusName, draft));
+}
+
+function buildStatusMappingDraft(mapping, availableStates) {
+	const normalizedMapping = normalizeStatusMapping(mapping || {});
+	const available = normalizeStatusValues(availableStates || normalizedMapping.availableStates || []);
+	const availableLookup = new Set(available.map((entry) => entry.toLowerCase()));
+
+	const filterKnown = (values) =>
+		normalizeStatusValues(values || []).filter((stateName) => availableLookup.has(String(stateName || "").toLowerCase()));
+
+	const pending = filterKnown(normalizedMapping.buckets.pending);
+	const validating = filterKnown(normalizedMapping.buckets.validating);
+	const finished = filterKnown(normalizedMapping.buckets.finished);
+
+	const used = new Set([...pending, ...validating, ...finished].map((entry) => entry.toLowerCase()));
+	const pool = available.filter((stateName) => !used.has(stateName.toLowerCase()));
+	const stateColors = { ...(normalizedMapping.stateColors || {}) };
+	const statusColorOverrides = { ...(normalizedMapping.statusColorOverrides || {}) };
+
+	for (const stateName of available) {
+		const key = getStateColorKey(stateName);
+		if (!key) continue;
+		if (!stateColors[key]) {
+			const zone = pending.some((entry) => getStateColorKey(entry) === key)
+				? "pending"
+				: validating.some((entry) => getStateColorKey(entry) === key)
+					? "validating"
+					: finished.some((entry) => getStateColorKey(entry) === key)
+						? "finished"
+						: "pool";
+			stateColors[key] = getRegionDefaultColor(zone);
+		}
+		if (typeof statusColorOverrides[key] !== "boolean") {
+			statusColorOverrides[key] = false;
+		}
+	}
+
+	return {
+		pool,
+		pending,
+		validating,
+		finished,
+		stateColors,
+		statusColorOverrides,
+	};
+}
+
+function getStatusBucketsFromDraft() {
+	const draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft();
+	return {
+		pending: normalizeStatusValues(draft.pending),
+		validating: normalizeStatusValues(draft.validating),
+		finished: normalizeStatusValues(draft.finished),
+	};
+}
+
+function getStatusColorsFromDraft() {
+	const draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft();
+	const colors = {};
+	for (const stateName of PopupState.availableProjectStates || []) {
+		const key = getStateColorKey(stateName);
+		if (!key) continue;
+		colors[key] = getDraftStatusColor(stateName, draft);
+	}
+	return colors;
+}
+
+function getStatusColorOverridesFromDraft() {
+	const draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft();
+	const overrides = {};
+	for (const stateName of PopupState.availableProjectStates || []) {
+		const key = getStateColorKey(stateName);
+		if (!key) continue;
+		overrides[key] = Boolean(draft.statusColorOverrides?.[key]);
+	}
+	return overrides;
+}
+
+function sortDraftZonesByAvailableOrder() {
+	const draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft();
+	const order = new Map(PopupState.availableProjectStates.map((name, index) => [String(name || "").toLowerCase(), index]));
+
+	const sortByKnownOrder = (values) =>
+		[...(values || [])].sort(
+			(left, right) =>
+				(Number(order.get(String(left || "").toLowerCase()) || 0) - Number(order.get(String(right || "").toLowerCase()) || 0)),
+		);
+
+	draft.pool = sortByKnownOrder(draft.pool);
+	draft.pending = sortByKnownOrder(draft.pending);
+	draft.validating = sortByKnownOrder(draft.validating);
+	draft.finished = sortByKnownOrder(draft.finished);
+	PopupState.statusMappingDraft = draft;
+}
+
+function renderStatusZone(containerElement, statuses, zoneKey) {
+	containerElement.innerHTML = "";
+	if (!statuses.length) {
+		const placeholder = document.createElement("span");
+		placeholder.className = "status-drop-empty";
+		placeholder.textContent = zoneKey === "pool" ? "Arraste status para as regiões abaixo" : "Nenhum status";
+		containerElement.appendChild(placeholder);
+		return;
+	}
+
+	for (const stateName of statuses) {
+		const chip = document.createElement("div");
+		chip.className = "status-chip";
+		const statusColor = getDraftStatusColor(stateName);
+		chip.style.color = statusColor;
+		chip.style.borderColor = statusColor;
+		chip.draggable = true;
+		chip.dataset.statusName = stateName;
+		chip.dataset.sourceZone = zoneKey;
+
+		const label = document.createElement("span");
+		label.className = "status-chip-label";
+		label.textContent = stateName;
+
+		const colorInput = document.createElement("input");
+		colorInput.type = "color";
+		colorInput.className = "status-chip-color-picker";
+		colorInput.value = statusColor;
+		colorInput.title = `Cor do status ${stateName}`;
+		colorInput.addEventListener("mousedown", (event) => {
+			event.stopPropagation();
+		});
+		colorInput.addEventListener("click", (event) => {
+			event.stopPropagation();
+		});
+		colorInput.addEventListener("change", (event) => {
+			event.stopPropagation();
+			const value = String(event.target?.value || "").trim().toLowerCase();
+			if (!/^#[0-9a-f]{6}$/.test(value)) return;
+			const draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft();
+			const key = getStateColorKey(stateName);
+			draft.stateColors[key] = value;
+			draft.statusColorOverrides[key] = true;
+			PopupState.statusMappingDraft = draft;
+			renderStatusMappingDraft();
+		});
+
+		chip.appendChild(label);
+		chip.appendChild(colorInput);
+		chip.addEventListener("dragstart", (event) => {
+			PopupState.draggingStatusName = stateName;
+			event.dataTransfer?.setData("text/plain", stateName);
+			event.dataTransfer?.setData("application/x-status-zone", zoneKey);
+			event.dataTransfer.effectAllowed = "move";
+		});
+		chip.addEventListener("dragend", () => {
+			PopupState.draggingStatusName = "";
+		});
+		containerElement.appendChild(chip);
+	}
+}
+
+function renderStatusMappingDraft() {
+	const draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft();
+	renderStatusZone(PopupDom.statusPool, draft.pool, "pool");
+	renderStatusZone(PopupDom.pendingDropZone, draft.pending, "pending");
+	renderStatusZone(PopupDom.validatingDropZone, draft.validating, "validating");
+	renderStatusZone(PopupDom.finishedDropZone, draft.finished, "finished");
+}
+
+function moveStatusToZone(statusName, targetZone) {
+	const allowedZones = new Set(["pool", "pending", "validating", "finished"]);
+	if (!allowedZones.has(targetZone)) return;
+
+	const status = String(statusName || "").trim();
+	if (!status) return;
+
+	const draft = PopupState.statusMappingDraft || createEmptyStatusMappingDraft();
+	draft.stateColors = draft.stateColors || {};
+	draft.statusColorOverrides = draft.statusColorOverrides || {};
+	for (const zone of ["pool", "pending", "validating", "finished"]) {
+		draft[zone] = (draft[zone] || []).filter((item) => String(item || "").toLowerCase() !== status.toLowerCase());
+	}
+
+	draft[targetZone].push(status);
+
+	const stateKey = getStateColorKey(status);
+	if (!draft.statusColorOverrides?.[stateKey]) {
+		draft.stateColors[stateKey] = getRegionDefaultColor(targetZone);
+	}
+
+	PopupState.statusMappingDraft = draft;
+	sortDraftZonesByAvailableOrder();
+	renderStatusMappingDraft();
+}
+
+function updateStatusMappingFormState() {
+	const hasProjectContext =
+		Boolean(String(PopupDom.organizationSelect.value || "").trim()) &&
+		Boolean(String(PopupDom.projectSelect.value || "").trim());
+	const hasStates = PopupState.availableProjectStates.length > 0;
+	const disabled = !hasProjectContext || !hasStates;
+
+	PopupDom.statusPool.classList.toggle("disabled", disabled);
+	PopupDom.pendingDropZone.classList.toggle("disabled", disabled);
+	PopupDom.validatingDropZone.classList.toggle("disabled", disabled);
+	PopupDom.finishedDropZone.classList.toggle("disabled", disabled);
+}
+
+function renderStatusMappingSection() {
+	const mapping = normalizeStatusMapping(PopupState.currentProjectStatusMapping || {});
+	const availableStates = normalizeStatusValues(PopupState.availableProjectStates || mapping.availableStates || []);
+	PopupState.availableProjectStates = availableStates;
+	PopupState.statusMappingDraft = buildStatusMappingDraft(mapping, availableStates);
+	renderStatusMappingDraft();
+
+	if (!availableStates.length) {
+		PopupDom.statusMappingStatus.classList.remove("hidden");
+		PopupDom.statusMappingStatus.textContent = "Selecione organização e projeto para carregar os status disponíveis.";
+	} else if (!mapping.configured) {
+		PopupDom.statusMappingStatus.classList.remove("hidden");
+		PopupDom.statusMappingStatus.textContent = "Mapeamento obrigatório: classifique os status do projeto antes de usar métricas e listagens.";
+	} else {
+		PopupDom.statusMappingStatus.classList.add("hidden");
+	}
+
+	updateStatusMappingFormState();
+}
+
+function ensureStatusMappingReadyForDataViews() {
+	if (isStatusMappingConfigured(PopupState.currentProjectStatusMapping)) {
+		return true;
+	}
+
+	showSettingsView();
+	PopupDom.statusMappingStatus.classList.remove("hidden");
+	PopupDom.statusMappingStatus.textContent =
+		"Mapeamento de status pendente: configure os buckets do projeto para continuar.";
+	return false;
 }
 
 function normalizeItemsPerPage(value) {
@@ -395,6 +720,10 @@ async function loadTokenScopedSettings(tokenId, { shouldRefreshFromStorage = fal
 	const selectedTokenId = String(tokenId || "").trim();
 	if (!selectedTokenId) {
 		populateEmptySettingsSelects();
+		PopupState.availableProjectStates = [];
+		PopupState.availableProjectWorkItemTypes = [];
+		PopupState.currentProjectStatusMapping = normalizeStatusMapping({ configured: false, buckets: {} });
+		renderStatusMappingSection();
 		updateSettingsFormState();
 		return;
 	}
@@ -417,6 +746,8 @@ async function loadTokenScopedSettings(tokenId, { shouldRefreshFromStorage = fal
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
 	}
+
+	await loadProjectStatusDiscoveryAndMapping();
 
 	updateSettingsFormState();
 }
@@ -590,6 +921,10 @@ function renderRecentList(items, { mode = "recent" } = {}) {
 }
 
 async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
+	if (!ensureStatusMappingReadyForDataViews()) {
+		return;
+	}
+
 	const bucket = String(metricBucket || "").trim().toLowerCase();
 	const mode = `metric:${bucket}`;
 	showChangesView(mode);
@@ -801,6 +1136,71 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 	updateSettingsFormState();
 }
 
+async function loadProjectStatusDiscoveryAndMapping() {
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
+	const projectId = String(PopupDom.projectSelect.value || "").trim();
+	const projectName = String(PopupDom.projectSelect.options[PopupDom.projectSelect.selectedIndex]?.text || "").trim();
+	const tokenValue = getSelectedTokenValue();
+
+	if (!organization || !projectId || !projectName || !tokenValue) {
+		PopupState.availableProjectStates = [];
+		PopupState.availableProjectWorkItemTypes = [];
+		PopupState.currentProjectStatusMapping = normalizeStatusMapping({ configured: false, buckets: {} });
+		renderStatusMappingSection();
+		return;
+	}
+
+	const discoveryResponse = await PopupApi.listProjectWorkItemStates(organization, projectId, projectName, tokenValue);
+	if (!discoveryResponse?.ok) {
+		throw new Error(discoveryResponse?.error || "Falha ao carregar status do projeto.");
+	}
+
+	PopupState.availableProjectStates = normalizeStatusValues(discoveryResponse.availableStates || []);
+	PopupState.availableProjectWorkItemTypes = normalizeStatusValues(discoveryResponse.workItemTypes || []);
+
+	const mappingResponse = await PopupApi.getProjectStatusMapping(organization, projectId);
+	if (!mappingResponse?.ok) {
+		throw new Error(mappingResponse?.error || "Falha ao carregar mapeamento de status.");
+	}
+
+	const mapping = normalizeStatusMapping(mappingResponse.mapping || discoveryResponse.statusMapping || {});
+	PopupState.currentProjectStatusMapping = {
+		...mapping,
+		availableStates: PopupState.availableProjectStates,
+		workItemTypes: PopupState.availableProjectWorkItemTypes,
+	};
+	renderStatusMappingSection();
+}
+
+async function saveCurrentProjectStatusMapping() {
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
+	const projectId = String(PopupDom.projectSelect.value || "").trim();
+
+	if (!organization || !projectId) {
+		throw new Error("Selecione organização e projeto para salvar o mapeamento de status.");
+	}
+
+	const buckets = getStatusBucketsFromDraft();
+	const stateColors = getStatusColorsFromDraft();
+	const statusColorOverrides = getStatusColorOverridesFromDraft();
+
+	const response = await PopupApi.saveProjectStatusMapping(organization, projectId, {
+		configured: true,
+		buckets,
+		stateColors,
+		statusColorOverrides,
+		availableStates: PopupState.availableProjectStates,
+		workItemTypes: PopupState.availableProjectWorkItemTypes,
+	});
+
+	if (!response?.ok) {
+		throw new Error(response?.error || "Falha ao salvar mapeamento de status.");
+	}
+
+	PopupState.currentProjectStatusMapping = normalizeStatusMapping(response.mapping || {});
+	renderStatusMappingSection();
+}
+
 async function saveCurrentSettings() {
 	const selectedToken = getSelectedToken();
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
@@ -888,6 +1288,10 @@ async function loadMetricsForCurrentSelection() {
 }
 
 async function runMetricsAction() {
+	if (!ensureStatusMappingReadyForDataViews()) {
+		return;
+	}
+
 	try {
 		await withBlockingUi(loadMetricsForCurrentSelection);
 	} catch (error) {
@@ -899,6 +1303,10 @@ async function refreshSprintsAndMetrics(fallbackMessage = "Falha ao atualizar sp
 	if (!PopupState.hasCompleteSettings) {
 		showSettingsView();
 		PopupRender.showSettingsStatus("Configure token, organizacao, projeto e time para atualizar os dados.", true);
+		return;
+	}
+
+	if (!ensureStatusMappingReadyForDataViews()) {
 		return;
 	}
 
@@ -916,6 +1324,10 @@ async function refreshSprintsAndMetrics(fallbackMessage = "Falha ao atualizar sp
 }
 
 async function loadRecentChanges(savedUiState = null) {
+	if (!ensureStatusMappingReadyForDataViews()) {
+		return;
+	}
+
 	PopupDom.recentButton.disabled = true;
 	showChangesView("recent");
 	setPaginationLoadingState(true);
@@ -946,6 +1358,10 @@ async function loadRecentChanges(savedUiState = null) {
 }
 
 async function loadCriticalPendingAnalyses(savedUiState = null) {
+	if (!ensureStatusMappingReadyForDataViews()) {
+		return;
+	}
+
 	PopupDom.criticalPendingButton.disabled = true;
 	showChangesView("critical");
 	setPaginationLoadingState(true);
@@ -980,6 +1396,10 @@ async function initializeSettingsView(savedSettings) {
 	await loadTokens(savedSettings.selectedTokenId || "");
 	if (!PopupState.availableTokens.length) {
 		populateEmptySettingsSelects();
+		PopupState.availableProjectStates = [];
+		PopupState.availableProjectWorkItemTypes = [];
+		PopupState.currentProjectStatusMapping = normalizeStatusMapping({ configured: false, buckets: {} });
+		renderStatusMappingSection();
 		updateSettingsFormState();
 		return;
 	}
@@ -1092,18 +1512,47 @@ function bindEvents() {
 
 	PopupDom.organizationSelect.addEventListener("change", async () => {
 		updateSettingsFormState();
-		await runSettingsAction(() => loadProjects(), "Falha ao carregar projetos.");
+		await runSettingsAction(async () => {
+			await loadProjects();
+			await loadProjectStatusDiscoveryAndMapping();
+		}, "Falha ao carregar projetos e status do projeto.");
 	});
 
 	PopupDom.projectSelect.addEventListener("change", async () => {
 		updateSettingsFormState();
-		await runSettingsAction(() => loadTeams(), "Falha ao carregar times.");
+		await runSettingsAction(async () => {
+			await loadTeams();
+			await loadProjectStatusDiscoveryAndMapping();
+		}, "Falha ao carregar times e status do projeto.");
 	});
 
 	PopupDom.teamSelect.addEventListener("change", async () => {
 		updateSettingsFormState();
 		await runSettingsAction(() => loadUsers(), "Falha ao carregar usuarios.");
 	});
+
+	const statusDropZones = [
+		{ element: PopupDom.statusPool, zone: "pool" },
+		{ element: PopupDom.pendingDropZone, zone: "pending" },
+		{ element: PopupDom.validatingDropZone, zone: "validating" },
+		{ element: PopupDom.finishedDropZone, zone: "finished" },
+	];
+
+	for (const zoneConfig of statusDropZones) {
+		zoneConfig.element.addEventListener("dragover", (event) => {
+			event.preventDefault();
+			event.dataTransfer.dropEffect = "move";
+		});
+
+		zoneConfig.element.addEventListener("drop", (event) => {
+			event.preventDefault();
+			if (zoneConfig.element.classList.contains("disabled")) return;
+			const statusName =
+				String(event.dataTransfer?.getData("text/plain") || "").trim() ||
+				String(PopupState.draggingStatusName || "").trim();
+			moveStatusToZone(statusName, zoneConfig.zone);
+		});
+	}
 
 	PopupDom.userSelect.addEventListener("change", () => {
 		updateSettingsFormState();
@@ -1274,12 +1723,40 @@ function bindEvents() {
 			return;
 		}
 
+		const buckets = getStatusBucketsFromDraft();
+		const hasMissingBucket = !buckets.pending.length || !buckets.validating.length || !buckets.finished.length;
+		if (hasMissingBucket) {
+			const confirmed = await requestConfirmation({
+				title: "Mapeamento de status incompleto",
+				description:
+					"Nem todas as regiões (Andamento, Validando e Finalizadas) possuem status. Deseja salvar mesmo assim?",
+				confirmText: "Salvar mesmo assim",
+				cancelText: "Voltar",
+			});
+
+			if (!confirmed) {
+				showSettingsView();
+				PopupDom.statusMappingStatus.classList.remove("hidden");
+				PopupDom.statusMappingStatus.textContent =
+					"Revise o mapeamento de status antes de salvar as configurações.";
+				return;
+			}
+		}
+
 		PopupDom.saveSettingsButton.disabled = true;
 		PopupRender.showSettingsStatus("Salvando configuracoes...");
 
 		await runSettingsAction(async () => {
 			await saveCurrentSettings();
 			PopupState.hasCompleteSettings = true;
+			if (!PopupState.availableProjectStates.length) {
+				await loadProjectStatusDiscoveryAndMapping();
+			}
+
+			await saveCurrentProjectStatusMapping();
+			PopupDom.statusMappingStatus.classList.remove("hidden");
+			PopupDom.statusMappingStatus.textContent = "Mapeamento de status salvo com sucesso.";
+
 			PopupRender.showMetricsSkeleton();
 			const hasSprints = await loadSprints();
 			showInitialView();
@@ -1324,6 +1801,15 @@ async function init() {
 		}
 
 		PopupState.hasCompleteSettings = true;
+		await withBlockingUi(() => loadProjectStatusDiscoveryAndMapping());
+		if (!isStatusMappingConfigured(PopupState.currentProjectStatusMapping)) {
+			showSettingsView();
+			PopupDom.statusMappingStatus.classList.remove("hidden");
+			PopupDom.statusMappingStatus.textContent =
+				"Mapeamento obrigatório: configure os status do projeto antes de usar métricas e listagens.";
+			return;
+		}
+
 		PopupRender.showMetricsSkeleton();
 		await withBlockingUi(async () => {
 			const hasSprints = await loadSprints();

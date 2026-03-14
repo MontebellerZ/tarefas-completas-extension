@@ -27,6 +27,12 @@ window.PopupApi = {
 	listUsers: (organization, projectId, teamId, tokenValue) =>
 		sendRuntimeMessage({ action: "listUsers", organization, projectId, teamId, tokenValue }),
 	listSprints: () => sendRuntimeMessage({ action: "listSprints" }),
+	listProjectWorkItemStates: (organization, projectId, projectName, tokenValue) =>
+		sendRuntimeMessage({ action: "listProjectWorkItemStates", organization, projectId, projectName, tokenValue }),
+	getProjectStatusMapping: (organization, projectId) =>
+		sendRuntimeMessage({ action: "getProjectStatusMapping", organization, projectId }),
+	saveProjectStatusMapping: (organization, projectId, mapping) =>
+		sendRuntimeMessage({ action: "saveProjectStatusMapping", organization, projectId, mapping }),
 	collectMetrics: (sprintId, includeCurrentDay) =>
 		sendRuntimeMessage({ action: "openAzureAndCollect", sprintId, includeCurrentDay }),
 	listSprintItemsByMetricBucket: (sprintId, metricBucket) =>
