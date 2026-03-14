@@ -142,6 +142,7 @@ function buildCriticalPendingAnalysesWiql(projectName, iterationPaths, targetUse
 		` WHERE [System.TeamProject] = '${escapedProject}'` +
 		` AND ${buildAssignedToCondition(targetUser)}` +
 		` AND [System.IterationPath] IN (${iterationsClause})` +
+		` AND [Microsoft.VSTS.Scheduling.CompletedWork] > 0` +
 		` AND (` +
 		` [System.WorkItemType] = 'Bug'` +
 		` OR (` +
@@ -196,6 +197,7 @@ async function listCriticalPendingAnalyses() {
 		if (!hasPendingCriticalAnalysisReport(fields)) continue;
 
 		const normalized = normalizeWorkItem(rawItem, dataset.settings);
+		if (!(Number(normalized.completed) > 0)) continue;
 		const itemType = String(normalized.type || "").trim().toLowerCase();
 		const isBug = itemType === "bug";
 		const hoursDifference = Number(normalized.completed) - Number(normalized.estimated);
