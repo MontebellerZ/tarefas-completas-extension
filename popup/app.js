@@ -511,7 +511,9 @@ async function deleteCurrentToken() {
 async function loadSprints() {
 	const response = await PopupApi.listSprints();
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar sprints.");
-	PopupRender.populateSprintSelect(response.sprints || [], response.defaultSprint || "");
+	const sprints = response.sprints || [];
+	PopupRender.populateSprintSelect(sprints, response.defaultSprint || "");
+	return sprints.length > 0;
 }
 
 async function loadMetricsForCurrentSelection() {
@@ -521,7 +523,7 @@ async function loadMetricsForCurrentSelection() {
 		return;
 	}
 
-	PopupRender.showResult("Consultando API do Azure DevOps...");
+	PopupRender.showMetricsSkeleton();
 	const response = await PopupApi.collectMetrics(sprintId, PopupDom.includeCurrentDayToggle.checked);
 	if (!response?.ok) {
 		PopupRender.showResult(`Erro: ${response?.error || "Falha inesperada."}`);
@@ -744,8 +746,13 @@ function bindEvents() {
 		await runSettingsAction(async () => {
 			await saveCurrentSettings();
 			PopupState.hasCompleteSettings = true;
-			await loadSprints();
+			PopupRender.showMetricsSkeleton();
+			const hasSprints = await loadSprints();
 			showInitialView();
+			if (!hasSprints) {
+				PopupRender.showResult("Nenhuma sprint disponível para o contexto atual. Verifique as configurações do time/projeto.");
+				return;
+			}
 			await loadMetricsForCurrentSelection();
 		}, "Falha ao salvar configuracoes.");
 		updateSettingsFormState();
@@ -753,6 +760,7 @@ function bindEvents() {
 }
 
 async function init() {
+		PopupRender.showMetricsSkeleton();
 	try {
 		const savedSettings = await withBlockingUi(async () => {
 			const settings = await loadSavedSettings();
@@ -778,8 +786,13 @@ async function init() {
 		}
 
 		PopupState.hasCompleteSettings = true;
+		PopupRender.showMetricsSkeleton();
 		await withBlockingUi(async () => {
-			await loadSprints();
+			const hasSprints = await loadSprints();
+			if (!hasSprints) {
+				PopupRender.showResult("Nenhuma sprint disponível para o contexto atual. Verifique as configurações do time/projeto.");
+				return;
+			}
 			await loadMetricsForCurrentSelection();
 		});
 	} catch (error) {

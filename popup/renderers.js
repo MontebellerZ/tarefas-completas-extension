@@ -55,6 +55,35 @@ function createMetricTile(title, value, valueClass) {
 	`;
 }
 
+function createSkeletonTile(extraClass = "") {
+	return `
+		<div class="metric-tile metric-tile-skeleton ${extraClass}">
+			<div class="skeleton-line skeleton-title shimmer"></div>
+			<div class="skeleton-line skeleton-value shimmer"></div>
+		</div>
+	`;
+}
+
+function renderMetricsSkeleton() {
+	return `
+		<div class="metrics-wrap metrics-wrap-skeleton">
+			<div class="metrics-sprint-title-skeleton shimmer"></div>
+			<div class="metrics-grid metrics-grid-primary">
+				${createSkeletonTile()}
+				${createSkeletonTile()}
+				${createSkeletonTile()}
+				${createSkeletonTile()}
+			</div>
+			<div class="metrics-grid metrics-grid-secondary">
+				${createSkeletonTile()}
+				${createSkeletonTile()}
+				${createSkeletonTile()}
+			</div>
+			<div class="metrics-feedback-skeleton shimmer"></div>
+		</div>
+	`;
+}
+
 function renderMetrics(metrics) {
 	const feedback = getAverageFeedback(metrics.dailyAverage);
 	const sprintLabel = String(metrics.selectedSprintLabel || "-");
@@ -91,6 +120,12 @@ function renderMetrics(metrics) {
 function showMetrics(metrics) {
 	PopupDom.result.classList.add("metrics-result");
 	PopupDom.result.innerHTML = renderMetrics(metrics);
+	PopupDom.result.classList.remove("hidden");
+}
+
+function showMetricsSkeleton() {
+	PopupDom.result.classList.add("metrics-result");
+	PopupDom.result.innerHTML = renderMetricsSkeleton();
 	PopupDom.result.classList.remove("hidden");
 }
 
@@ -262,6 +297,7 @@ function formatMetrics(metrics) {
 window.PopupRender = {
 	showResult,
 	showMetrics,
+	showMetricsSkeleton,
 	showSettingsStatus,
 	showTokenStatus,
 	populateSelect,

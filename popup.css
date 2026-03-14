@@ -256,11 +256,23 @@ button:disabled {
   gap: 10px;
 }
 
+.metrics-wrap-skeleton {
+  gap: 10px;
+}
+
 .metrics-sprint-title {
   text-align: center;
   font-size: 15px;
   font-weight: 700;
   color: #1f2937;
+}
+
+.metrics-sprint-title-skeleton {
+  height: 18px;
+  width: 62%;
+  margin: 0 auto;
+  border-radius: 8px;
+  background: #e5e7eb;
 }
 
 .metrics-grid {
@@ -288,6 +300,56 @@ button:disabled {
   justify-content: center;
   padding: 6px 6px;
   text-align: center;
+}
+
+.metric-tile-skeleton {
+  align-items: stretch;
+  justify-content: center;
+  gap: 6px;
+}
+
+.skeleton-line {
+  border-radius: 6px;
+  background: #e5e7eb;
+}
+
+.skeleton-title {
+  height: 11px;
+  width: 72%;
+  margin: 0 auto;
+}
+
+.skeleton-value {
+  height: 26px;
+  width: 56%;
+  margin: 0 auto;
+}
+
+.metrics-feedback-skeleton {
+  height: 16px;
+  width: 78%;
+  border-radius: 7px;
+  background: #e5e7eb;
+}
+
+.shimmer {
+  background-image: linear-gradient(
+    100deg,
+    rgba(229, 231, 235, 0.96) 0%,
+    rgba(243, 244, 246, 0.98) 45%,
+    rgba(229, 231, 235, 0.96) 100%
+  );
+  background-size: 220% 100%;
+  animation: shimmer-pass 1.15s linear infinite;
+}
+
+@keyframes shimmer-pass {
+  0% {
+    background-position: 120% 0;
+  }
+  100% {
+    background-position: -120% 0;
+  }
 }
 
 .metric-title {
