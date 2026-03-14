@@ -14,6 +14,7 @@ function sendRuntimeMessage(message) {
 window.PopupApi = {
 	sendRuntimeMessage,
 	getSettings: () => sendRuntimeMessage({ action: "getSettings" }),
+	listOrganizations: (tokenValue) => sendRuntimeMessage({ action: "listOrganizations", tokenValue }),
 	saveSettings: (settings) => sendRuntimeMessage({ action: "saveSettings", settings }),
 	clearUserData: () => sendRuntimeMessage({ action: "clearUserData" }),
 	listProjects: (organization, tokenValue) =>

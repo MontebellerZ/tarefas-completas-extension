@@ -44,7 +44,9 @@ function isCompleteSettings(settings) {
 function applySettingsToInputs(settings) {
 	PopupDom.tokenNameInput.value = settings.tokenName || "";
 	PopupDom.tokenValueInput.value = settings.tokenValue || "";
-	PopupDom.organizationInput.value = settings.organization || "";
+	if (PopupDom.organizationSelect) {
+		PopupDom.organizationSelect.value = settings.organization || "";
+	}
 	PopupState.hasCompleteSettings = isCompleteSettings(settings);
 	updateClearButtonVisibility(
 		Boolean(

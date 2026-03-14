@@ -102,7 +102,7 @@ async function loadSavedSettings() {
 }
 
 async function loadProjects(selectedProjectId = "", selectedTeamId = "", selectedUserId = "") {
-	const organization = PopupDom.organizationInput.value.trim();
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const tokenValue = PopupDom.tokenValueInput.value.trim();
 
 	if (!organization || !tokenValue) {
@@ -116,7 +116,7 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "", selecte
 	const response = await PopupApi.listProjects(organization, tokenValue);
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar projetos.");
 
-	PopupDom.organizationInput.value = response.organization || organization;
+	PopupDom.organizationSelect.value = response.organization || organization;
 	PopupRender.populateSelect(PopupDom.projectSelect, response.projects || [], "Selecione um projeto", selectedProjectId);
 
 	if (selectedProjectId) {
@@ -128,8 +128,33 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "", selecte
 	}
 }
 
+async function loadOrganizations(selectedOrganization = "") {
+	const tokenValue = PopupDom.tokenValueInput.value.trim();
+
+	if (!tokenValue) {
+		PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", "");
+		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
+		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
+		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+		PopupState.availableUsers = [];
+		return;
+	}
+
+	const response = await PopupApi.listOrganizations(tokenValue);
+	if (!response?.ok) {
+		throw new Error(response?.error || "Falha ao carregar organizacoes.");
+	}
+
+	const options = [...(response.organizations || [])];
+	if (selectedOrganization && !options.some((entry) => String(entry.value) === String(selectedOrganization))) {
+		options.unshift({ value: selectedOrganization, label: selectedOrganization, name: selectedOrganization });
+	}
+	const preferred = selectedOrganization || response.defaultOrganization || "";
+	PopupRender.populateSelect(PopupDom.organizationSelect, options, "Selecione uma organizacao", preferred);
+}
+
 async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamId = "", selectedUserId = "") {
-	const organization = PopupDom.organizationInput.value.trim();
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const tokenValue = PopupDom.tokenValueInput.value.trim();
 
 	if (!organization || !tokenValue || !projectId) {
@@ -153,7 +178,7 @@ async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamI
 }
 
 async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = PopupDom.teamSelect.value, selectedUserId = "") {
-	const organization = PopupDom.organizationInput.value.trim();
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const tokenValue = PopupDom.tokenValueInput.value.trim();
 
 	if (!organization || !tokenValue || !projectId || !teamId) {
@@ -172,7 +197,7 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 async function saveSettings() {
 	const tokenName = PopupDom.tokenNameInput.value.trim();
 	const tokenValue = PopupDom.tokenValueInput.value.trim();
-	const organization = PopupDom.organizationInput.value.trim();
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const projectId = PopupDom.projectSelect.value;
 	const teamId = PopupDom.teamSelect.value;
 	const selectedUserId = PopupDom.userSelect.value;
@@ -231,6 +256,7 @@ async function loadRecentChanges() {
 
 async function initializeSettingsView(savedSettings) {
 	PopupRender.applySettingsToInputs(savedSettings);
+	PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", savedSettings.organization || "");
 	PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 	PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
 	const selectedUserValue = savedSettings.selectedUserId || savedSettings.selectedUserDescriptor || savedSettings.selectedUserUniqueName || "";
@@ -238,7 +264,10 @@ async function initializeSettingsView(savedSettings) {
 	PopupState.availableUsers = [];
 
 	if (savedSettings.organization && savedSettings.tokenValue) {
+		await loadOrganizations(savedSettings.organization || "");
 		await loadProjects(savedSettings.projectId || "", savedSettings.teamId || "", selectedUserValue);
+	} else if (savedSettings.tokenValue) {
+		await loadOrganizations("");
 	}
 }
 
@@ -252,11 +281,14 @@ async function runSettingsAction(action, fallbackMessage) {
 }
 
 function bindEvents() {
-	PopupDom.organizationInput.addEventListener("change", async () => {
-		await runSettingsAction(() => loadProjects(), "Falha ao carregar projetos.");
+	PopupDom.tokenValueInput.addEventListener("change", async () => {
+		await runSettingsAction(async () => {
+			await loadOrganizations();
+			await loadProjects();
+		}, "Falha ao carregar organizacoes/projetos.");
 	});
 
-	PopupDom.tokenValueInput.addEventListener("change", async () => {
+	PopupDom.organizationSelect.addEventListener("change", async () => {
 		await runSettingsAction(() => loadProjects(), "Falha ao carregar projetos.");
 	});
 
@@ -325,7 +357,7 @@ function bindEvents() {
 	PopupDom.saveSettingsButton.addEventListener("click", async () => {
 		const tokenName = PopupDom.tokenNameInput.value.trim();
 		const tokenValue = PopupDom.tokenValueInput.value.trim();
-		const organization = PopupDom.organizationInput.value.trim();
+		const organization = String(PopupDom.organizationSelect.value || "").trim();
 		const projectId = PopupDom.projectSelect.value;
 		const teamId = PopupDom.teamSelect.value;
 

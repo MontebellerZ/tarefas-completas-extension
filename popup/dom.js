@@ -11,7 +11,7 @@ window.PopupDom = {
 	clearSettingsButton: document.getElementById("clearSettingsButton"),
 	tokenNameInput: document.getElementById("tokenNameInput"),
 	tokenValueInput: document.getElementById("tokenValueInput"),
-	organizationInput: document.getElementById("organizationInput"),
+	organizationSelect: document.getElementById("organizationSelect"),
 	projectSelect: document.getElementById("projectSelect"),
 	teamSelect: document.getElementById("teamSelect"),
 	userSelect: document.getElementById("userSelect"),

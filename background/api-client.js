@@ -46,6 +46,49 @@ async function listProjects(organization, tokenValue) {
 	};
 }
 
+async function listOrganizations(tokenValue) {
+	const normalizedToken = String(tokenValue || "").trim();
+	if (!normalizedToken) {
+		throw new Error("Informe o PAT para carregar as organizacoes.");
+	}
+
+	const profile = await azureFetchJson(
+		"https://app.vssps.visualstudio.com/_apis/profile/profiles/me?api-version=7.1-preview.3",
+		{ tokenValue: normalizedToken },
+	);
+
+	const memberId = String(profile?.id || "").trim();
+	if (!memberId) {
+		throw new Error("Nao foi possivel identificar o perfil do PAT.");
+	}
+
+	const accounts = await azureFetchJson(
+		`https://app.vssps.visualstudio.com/_apis/accounts?memberId=${encodePathPart(memberId)}&api-version=7.1-preview.1`,
+		{ tokenValue: normalizedToken },
+	);
+
+	const byOrg = new Map();
+	for (const account of accounts?.value || []) {
+		const accountName = String(account?.accountName || "").trim();
+		if (!accountName) continue;
+		if (byOrg.has(accountName.toLowerCase())) continue;
+		byOrg.set(accountName.toLowerCase(), {
+			value: accountName,
+			label: accountName,
+			name: accountName,
+		});
+	}
+
+	const organizations = [...byOrg.values()].sort((left, right) =>
+		String(left.label || "").localeCompare(String(right.label || ""), "pt-BR", { sensitivity: "base" }),
+	);
+
+	return {
+		organizations,
+		defaultOrganization: organizations[0]?.value || "",
+	};
+}
+
 async function listTeams(organization, projectId, tokenValue) {
 	const org = normalizeOrganization(organization);
 	if (!org || !projectId) throw new Error("Selecione organizacao e projeto para carregar os times.");

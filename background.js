@@ -12,6 +12,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		"getSettings",
 		"saveSettings",
 		"clearUserData",
+		"listOrganizations",
 		"listProjects",
 		"listTeams",
 		"listUsers",
@@ -27,6 +28,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 			switch (message.action) {
 				case "getSettings":
 					sendResponse({ ok: true, ...(await getSettings()) });
+					break;
+				case "listOrganizations":
+					sendResponse({ ok: true, ...(await listOrganizations(message.tokenValue)) });
 					break;
 				case "saveSettings":
 					await saveSettings(message.settings || {});
