@@ -61,6 +61,34 @@ function updatePaginationControls() {
 	PopupDom.itemsPerPageSelectBottom.value = String(normalizeItemsPerPage(PopupState.itemsPerPage));
 }
 
+function setPaginationLoadingState(isLoading) {
+	const loading = Boolean(isLoading);
+	const controls = [
+		PopupDom.previousPageButton,
+		PopupDom.nextPageButton,
+		PopupDom.previousPageButtonBottom,
+		PopupDom.nextPageButtonBottom,
+		PopupDom.itemsPerPageSelect,
+		PopupDom.itemsPerPageSelectBottom,
+	];
+
+	for (const control of controls) {
+		control.disabled = loading;
+	}
+
+	PopupDom.paginationStatus.classList.toggle("pagination-status-skeleton", loading);
+	PopupDom.paginationStatusBottom.classList.toggle("pagination-status-skeleton", loading);
+
+	if (loading) {
+		PopupDom.paginationStatus.textContent = " ";
+		PopupDom.paginationStatusBottom.textContent = " ";
+		return;
+	}
+
+	updatePaginationControls();
+	updateBottomPaginationVisibility();
+}
+
 function updateBottomPaginationVisibility() {
 	requestAnimationFrame(() => {
 		const isListVisible = !PopupDom.recentSection.classList.contains("hidden") && !PopupDom.changesView.classList.contains("hidden");
@@ -565,6 +593,7 @@ async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
 	const bucket = String(metricBucket || "").trim().toLowerCase();
 	const mode = `metric:${bucket}`;
 	showChangesView(mode);
+	setPaginationLoadingState(true);
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
 	PopupRender.showRecentChangesSkeleton(3, { mode: "recent" });
@@ -572,6 +601,7 @@ async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
 	const sprintId = String(PopupDom.sprintSelect.value || "").trim();
 	if (!sprintId) {
 		PopupDom.recentList.textContent = "Selecione uma sprint para listar as tarefas dessa métrica.";
+		setPaginationLoadingState(false);
 		return;
 	}
 
@@ -595,6 +625,8 @@ async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
 		persistUiStateIfNeeded();
 	} catch (error) {
 		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
+	} finally {
+		setPaginationLoadingState(false);
 	}
 }
 
@@ -886,6 +918,7 @@ async function refreshSprintsAndMetrics(fallbackMessage = "Falha ao atualizar sp
 async function loadRecentChanges(savedUiState = null) {
 	PopupDom.recentButton.disabled = true;
 	showChangesView("recent");
+	setPaginationLoadingState(true);
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
 	PopupRender.showRecentChangesSkeleton(3, { mode: "recent" });
@@ -907,6 +940,7 @@ async function loadRecentChanges(savedUiState = null) {
 	} catch (error) {
 		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
 	} finally {
+		setPaginationLoadingState(false);
 		PopupDom.recentButton.disabled = false;
 	}
 }
@@ -914,6 +948,7 @@ async function loadRecentChanges(savedUiState = null) {
 async function loadCriticalPendingAnalyses(savedUiState = null) {
 	PopupDom.criticalPendingButton.disabled = true;
 	showChangesView("critical");
+	setPaginationLoadingState(true);
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
 	PopupRender.showRecentChangesSkeleton(3, { mode: "critical" });
@@ -935,6 +970,7 @@ async function loadCriticalPendingAnalyses(savedUiState = null) {
 	} catch (error) {
 		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
 	} finally {
+		setPaginationLoadingState(false);
 		PopupDom.criticalPendingButton.disabled = false;
 	}
 }
