@@ -187,7 +187,7 @@ h1 {
 .icon-circle-button:disabled {
   background: #eef2f8;
   color: #8ba4be;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .refresh-icon-button {
@@ -299,7 +299,7 @@ button {
 
 button:disabled {
   background: #8ba4be;
-  cursor: wait;
+  cursor: not-allowed;
 }
 
 .result {
