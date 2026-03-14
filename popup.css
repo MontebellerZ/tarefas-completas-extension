@@ -194,19 +194,14 @@ h1 {
   font-size: 17px;
 }
 
-.icon-action-button {
-  width: 40px;
-  min-width: 40px;
-  padding: 0;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  line-height: 1;
+.delete-button {
+  background: #fdecee;
+  border-color: #efb8bc;
+  color: #c74a51;
 }
 
-.delete-button {
-  background: #d13438;
+.delete-button:hover:not(:disabled) {
+  background: #f9dde0;
 }
 
 label {
