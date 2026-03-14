@@ -514,6 +514,31 @@ async function loadSprints() {
 	PopupRender.populateSprintSelect(response.sprints || [], response.defaultSprint || "");
 }
 
+async function loadMetricsForCurrentSelection() {
+	const sprintId = String(PopupDom.sprintSelect.value || "").trim();
+	if (!sprintId) {
+		PopupRender.showResult("Nenhuma sprint disponível para cálculo.");
+		return;
+	}
+
+	PopupRender.showResult("Consultando API do Azure DevOps...");
+	const response = await PopupApi.collectMetrics(sprintId, PopupDom.includeCurrentDayToggle.checked);
+	if (!response?.ok) {
+		PopupRender.showResult(`Erro: ${response?.error || "Falha inesperada."}`);
+		return;
+	}
+
+	PopupRender.showMetrics(response.metrics);
+}
+
+async function runMetricsAction() {
+	try {
+		await withBlockingUi(loadMetricsForCurrentSelection);
+	} catch (error) {
+		PopupRender.showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao calcular métricas."}`);
+	}
+}
+
 async function loadRecentChanges() {
 	PopupDom.recentButton.disabled = true;
 	showChangesView();
@@ -662,30 +687,12 @@ function bindEvents() {
 		updateSettingsFormState();
 	});
 
-	PopupDom.runButton.addEventListener("click", () => {
-		PopupDom.runButton.disabled = true;
-		PopupRender.showResult("Consultando API do Azure DevOps...");
+	PopupDom.sprintSelect.addEventListener("change", () => {
+		runMetricsAction();
+	});
 
-		chrome.runtime.sendMessage(
-			{
-				action: "openAzureAndCollect",
-				sprintId: PopupDom.sprintSelect.value,
-				includeCurrentDay: PopupDom.includeCurrentDayToggle.checked,
-			},
-			(response) => {
-				PopupDom.runButton.disabled = false;
-				const runtimeError = chrome.runtime.lastError;
-				if (runtimeError) {
-					PopupRender.showResult(`Erro: ${runtimeError.message}`);
-					return;
-				}
-				if (!response?.ok) {
-					PopupRender.showResult(`Erro: ${response?.error || "Falha inesperada."}`);
-					return;
-				}
-				PopupRender.showResult(PopupRender.formatMetrics(response.metrics));
-			},
-		);
+	PopupDom.includeCurrentDayToggle.addEventListener("change", () => {
+		runMetricsAction();
 	});
 
 	PopupDom.recentButton.addEventListener("click", () => {
@@ -739,13 +746,13 @@ function bindEvents() {
 			PopupState.hasCompleteSettings = true;
 			await loadSprints();
 			showInitialView();
+			await loadMetricsForCurrentSelection();
 		}, "Falha ao salvar configuracoes.");
 		updateSettingsFormState();
 	});
 }
 
 async function init() {
-	PopupDom.runButton.disabled = true;
 	try {
 		const savedSettings = await withBlockingUi(async () => {
 			const settings = await loadSavedSettings();
@@ -771,11 +778,13 @@ async function init() {
 		}
 
 		PopupState.hasCompleteSettings = true;
-		await withBlockingUi(() => loadSprints());
+		await withBlockingUi(async () => {
+			await loadSprints();
+			await loadMetricsForCurrentSelection();
+		});
 	} catch (error) {
 		PopupRender.showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao carregar a extensao."}`);
 	} finally {
-		PopupDom.runButton.disabled = false;
 		updateTokenFormState();
 		updateSettingsFormState();
 	}

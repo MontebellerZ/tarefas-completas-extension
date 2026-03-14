@@ -211,8 +211,34 @@ async function collectMetrics(sprintId, includeCurrentDay) {
 	const consideredDays = countElapsedWorkingDays(sprint, includeCurrentDay);
 	const dailyAverage = consideredDays > 0 ? sumHours / consideredDays : 0;
 
+	const pendingStates = new Set(["to do", "approved", "to refactor", "in progress", "pause"]);
+	const validatingStates = new Set(["to test"]);
+	const finishedStates = new Set(["to release", "to review", "done"]);
+
+	let pendingTasks = 0;
+	let validatingTasks = 0;
+	let finishedTasks = 0;
+
+	for (const item of sprint.workedItems) {
+		const normalizedState = String(item?.state || "").trim().toLowerCase();
+		if (pendingStates.has(normalizedState)) {
+			pendingTasks += 1;
+			continue;
+		}
+		if (validatingStates.has(normalizedState)) {
+			validatingTasks += 1;
+			continue;
+		}
+		if (finishedStates.has(normalizedState)) {
+			finishedTasks += 1;
+		}
+	}
+
 	return {
 		startedTasks: sprint.workedItems.length,
+		pendingTasks,
+		validatingTasks,
+		finishedTasks,
 		sumHours: Number(sumHours.toFixed(4)),
 		completedDays: consideredDays,
 		dailyAverage: Number(dailyAverage.toFixed(4)),
