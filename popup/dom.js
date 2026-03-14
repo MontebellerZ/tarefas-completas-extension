@@ -42,6 +42,7 @@ window.PopupDom = {
 	nextPageButtonBottom: document.getElementById("nextPageButtonBottom"),
 	paginationStatusBottom: document.getElementById("paginationStatusBottom"),
 	itemsPerPageSelectBottom: document.getElementById("itemsPerPageSelectBottom"),
+	bottomPaginationControls: document.getElementById("bottomPaginationControls"),
 	recentSection: document.getElementById("recentSection"),
 	changesViewTitle: document.getElementById("changesViewTitle"),
 	detailSection: document.getElementById("detailSection"),

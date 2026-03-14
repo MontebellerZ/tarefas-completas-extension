@@ -60,6 +60,23 @@ function updatePaginationControls() {
 	PopupDom.itemsPerPageSelectBottom.value = String(normalizeItemsPerPage(PopupState.itemsPerPage));
 }
 
+function updateBottomPaginationVisibility() {
+	requestAnimationFrame(() => {
+		const isListVisible = !PopupDom.recentSection.classList.contains("hidden") && !PopupDom.changesView.classList.contains("hidden");
+		if (!isListVisible) {
+			PopupDom.bottomPaginationControls.classList.add("hidden");
+			return;
+		}
+
+		const recentListNeedsScroll = PopupDom.recentList.scrollHeight > PopupDom.recentList.clientHeight + 1;
+		const scrollingElement = document.scrollingElement || document.documentElement;
+		const pageNeedsScroll = Number(scrollingElement.scrollHeight || 0) > Number(scrollingElement.clientHeight || window.innerHeight || 0) + 1;
+		const shouldShowBottomPagination = recentListNeedsScroll || pageNeedsScroll;
+
+		PopupDom.bottomPaginationControls.classList.toggle("hidden", !shouldShowBottomPagination);
+	});
+}
+
 function getCurrentWindowScrollTop() {
 	return Number(
 		window.scrollY ||
@@ -426,6 +443,7 @@ function showList() {
 	PopupDom.criticalAnalysisButton.classList.add("hidden");
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
+	updateBottomPaginationVisibility();
 	persistUiStateIfNeeded();
 	requestAnimationFrame(() => {
 		window.scrollTo(0, PopupState.lastWindowScrollTop);
@@ -452,6 +470,7 @@ function showChangesView(mode = "recent") {
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.remove("hidden");
 	updatePaginationControls();
+	updateBottomPaginationVisibility();
 	persistUiStateIfNeeded();
 }
 
@@ -465,6 +484,7 @@ function showSettingsView() {
 	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.settingsView.classList.remove("hidden");
+	PopupDom.bottomPaginationControls.classList.add("hidden");
 	persistUiStateIfNeeded();
 }
 
@@ -486,6 +506,7 @@ function showInitialView() {
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.add("hidden");
+	PopupDom.bottomPaginationControls.classList.add("hidden");
 	PopupDom.initialView.classList.remove("hidden");
 	persistUiStateIfNeeded();
 }
@@ -523,6 +544,7 @@ function renderCurrentListPage({ mode = "recent" } = {}) {
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
 	updatePaginationControls();
+	updateBottomPaginationVisibility();
 	persistUiStateIfNeeded();
 }
 
@@ -1074,9 +1096,14 @@ function bindEvents() {
 		"scroll",
 		() => {
 			persistUiStateIfNeeded();
+			updateBottomPaginationVisibility();
 		},
 		{ passive: true },
 	);
+
+	window.addEventListener("resize", () => {
+		updateBottomPaginationVisibility();
+	});
 
 	PopupDom.detailDescription.addEventListener(
 		"scroll",
@@ -1297,6 +1324,7 @@ async function init() {
 		PopupState.isRestoringUiState = false;
 		persistUiStateIfNeeded();
 		updatePaginationControls();
+		updateBottomPaginationVisibility();
 		updateTokenFormState();
 		updateSettingsFormState();
 	}
