@@ -129,6 +129,34 @@ function showMetricsSkeleton() {
 	PopupDom.result.classList.remove("hidden");
 }
 
+function renderRecentChangesSkeleton(itemCount = 3) {
+	const total = Math.max(1, Number(itemCount) || 5);
+	return Array.from({ length: total })
+		.map(
+			() => `
+				<div class="recent-item recent-item-skeleton">
+					<div class="recent-item-header">
+						<span class="item-id-chip skeleton-chip shimmer"></span>
+						<div class="recent-item-title skeleton-line skeleton-row-title shimmer"></div>
+					</div>
+					<div class="recent-item-row">
+						<span class="skeleton-line skeleton-row-left shimmer"></span>
+						<span class="skeleton-line skeleton-row-right shimmer"></span>
+					</div>
+					<div class="recent-item-row">
+						<span class="skeleton-line skeleton-row-left shimmer"></span>
+						<span class="skeleton-line skeleton-row-right shimmer"></span>
+					</div>
+				</div>
+			`,
+		)
+		.join("");
+}
+
+function showRecentChangesSkeleton(itemCount = 3) {
+	PopupDom.recentList.innerHTML = renderRecentChangesSkeleton(itemCount);
+}
+
 function showSettingsStatus(text, isError = false) {
 	PopupDom.settingsStatus.textContent = text;
 	PopupDom.settingsStatus.classList.remove("hidden");
@@ -298,6 +326,7 @@ window.PopupRender = {
 	showResult,
 	showMetrics,
 	showMetricsSkeleton,
+	showRecentChangesSkeleton,
 	showSettingsStatus,
 	showTokenStatus,
 	populateSelect,

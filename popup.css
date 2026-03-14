@@ -486,6 +486,44 @@ button:disabled {
   background: #eef5ff;
 }
 
+.recent-item-skeleton {
+  border-left-color: #d9e1ee;
+  cursor: default;
+}
+
+.recent-item-skeleton:hover {
+  background: #f9fbff;
+}
+
+.recent-item-skeleton .skeleton-chip {
+  display: inline-block;
+  width: 48px;
+  height: 18px;
+  border-radius: 12px;
+  background: #e5e7eb;
+}
+
+.recent-item-skeleton .skeleton-line {
+  display: inline-block;
+  border-radius: 6px;
+  background: #e5e7eb;
+}
+
+.recent-item-skeleton .skeleton-row-title {
+  height: 12px;
+  width: 72%;
+}
+
+.recent-item-skeleton .skeleton-row-left {
+  height: 11px;
+  width: 42%;
+}
+
+.recent-item-skeleton .skeleton-row-right {
+  height: 11px;
+  width: 34%;
+}
+
 .recent-item-header {
   display: flex;
   align-items: center;

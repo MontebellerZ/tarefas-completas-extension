@@ -546,7 +546,7 @@ async function loadRecentChanges() {
 	showChangesView();
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
-	PopupDom.recentList.textContent = "Carregando itens alterados...";
+	PopupRender.showRecentChangesSkeleton(3);
 
 	try {
 		const response = await PopupApi.listRecentChanges();
