@@ -7,6 +7,128 @@ function openItemInAzure(url) {
 	window.open(url, "_blank", "noopener,noreferrer");
 }
 
+const UI_STATE_STORAGE_KEY = "popupUiState";
+
+function getCurrentWindowScrollTop() {
+	return Number(
+		window.scrollY ||
+			(document.scrollingElement ? document.scrollingElement.scrollTop : 0) ||
+			document.documentElement.scrollTop ||
+			document.body.scrollTop ||
+			0,
+	);
+}
+
+function getCurrentViewName() {
+	if (!PopupDom.initialView.classList.contains("hidden")) return "initial";
+	if (!PopupDom.settingsView.classList.contains("hidden")) return "settings";
+	if (!PopupDom.tokenSetupView.classList.contains("hidden")) return "token";
+	if (!PopupDom.changesView.classList.contains("hidden")) {
+		if (!PopupDom.detailSection.classList.contains("hidden")) return "detail";
+		return "changes";
+	}
+	return "initial";
+}
+
+function persistUiStateIfNeeded() {
+	if (PopupState.isRestoringUiState) return;
+	void saveUiStateSnapshot();
+}
+
+async function getSavedUiStateSnapshot() {
+	try {
+		const stored = await chrome.storage.local.get(UI_STATE_STORAGE_KEY);
+		return stored?.[UI_STATE_STORAGE_KEY] || null;
+	} catch {
+		return null;
+	}
+}
+
+async function saveUiStateSnapshot(overrides = {}) {
+	const snapshot = {
+		view: getCurrentViewName(),
+		listMode: PopupState.currentListMode || "recent",
+		sprintId: String(PopupDom.sprintSelect?.value || "").trim(),
+		includeCurrentDay: Boolean(PopupDom.includeCurrentDayToggle?.checked),
+		detailItemId: String(PopupState.currentDetailItemId || "").trim(),
+		detailItemUrl: String(PopupState.currentDetailItemUrl || "").trim(),
+		windowScrollTop: getCurrentWindowScrollTop(),
+		listScrollTop: Number(PopupDom.recentList?.scrollTop || 0),
+		detailDescriptionScrollTop: Number(PopupDom.detailDescription?.scrollTop || 0),
+		updatedAt: Date.now(),
+		...overrides,
+	};
+
+	try {
+		await chrome.storage.local.set({ [UI_STATE_STORAGE_KEY]: snapshot });
+	} catch {
+		// Ignore persistence errors in popup UI.
+	}
+}
+
+function applySavedUiStateInputs(savedUiState) {
+	if (!savedUiState) return;
+	if (typeof savedUiState.includeCurrentDay === "boolean") {
+		PopupDom.includeCurrentDayToggle.checked = savedUiState.includeCurrentDay;
+	}
+}
+
+function restoreChangesScroll(savedUiState) {
+	const scrollTop = Number(savedUiState?.listScrollTop || 0);
+	if (!(scrollTop > 0)) return;
+	requestAnimationFrame(() => {
+		PopupDom.recentList.scrollTop = scrollTop;
+	});
+}
+
+function restoreWindowScroll(savedUiState) {
+	const scrollTop = Number(savedUiState?.windowScrollTop || 0);
+	requestAnimationFrame(() => {
+		window.scrollTo(0, scrollTop);
+		if (document.scrollingElement) {
+			document.scrollingElement.scrollTop = scrollTop;
+		}
+		document.documentElement.scrollTop = scrollTop;
+		document.body.scrollTop = scrollTop;
+	});
+}
+
+function restoreDetailDescriptionScroll(savedUiState) {
+	const scrollTop = Number(savedUiState?.detailDescriptionScrollTop || 0);
+	if (!(scrollTop > 0)) return;
+	requestAnimationFrame(() => {
+		PopupDom.detailDescription.scrollTop = scrollTop;
+	});
+}
+
+function restoreDetailIfNeeded(savedUiState, items = []) {
+	if (!savedUiState || savedUiState.view !== "detail") {
+		restoreWindowScroll(savedUiState);
+		restoreChangesScroll(savedUiState);
+		return;
+	}
+
+	const targetId = String(savedUiState.detailItemId || "").trim();
+	const targetUrl = String(savedUiState.detailItemUrl || "").trim();
+	const targetItem = items.find((item) => {
+		const itemId = String(item?.id || "").trim();
+		const itemUrl = String(item?.itemUrl || "").trim();
+		if (targetId && itemId === targetId) return true;
+		if (targetUrl && itemUrl === targetUrl) return true;
+		return false;
+	});
+
+	if (targetItem) {
+		showDetail(targetItem);
+		restoreWindowScroll(savedUiState);
+		restoreDetailDescriptionScroll(savedUiState);
+		return;
+	}
+
+	restoreWindowScroll(savedUiState);
+	restoreChangesScroll(savedUiState);
+}
+
 function getSelectedToken() {
 	return PopupState.availableTokens.find((token) => String(token.value) === String(PopupDom.tokenSelect.value || "")) || null;
 }
@@ -170,6 +292,7 @@ function showTokenSetupView(allowBack) {
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.tokenSetupView.classList.remove("hidden");
 	PopupDom.backFromTokenButton.classList.toggle("hidden", !allowBack);
+	persistUiStateIfNeeded();
 }
 
 function showDetail(item) {
@@ -186,6 +309,7 @@ function showDetail(item) {
 	PopupDom.detailMeta.appendChild(card);
 
 	PopupDom.detailDescription.innerHTML = item.description || "<em>Sem descricao.</em>";
+	PopupState.currentDetailItemId = String(item?.id || "").trim();
 	PopupState.currentDetailItemUrl = item.itemUrl || "";
 	PopupDom.detailOpenLinkButton.classList.toggle("hidden", !PopupState.currentDetailItemUrl);
 	PopupDom.criticalAnalysisButton.classList.toggle(
@@ -194,6 +318,7 @@ function showDetail(item) {
 	);
 	PopupDom.recentSection.classList.add("hidden");
 	PopupDom.detailSection.classList.remove("hidden");
+	persistUiStateIfNeeded();
 
 	requestAnimationFrame(() => {
 		window.scrollTo(0, 0);
@@ -207,8 +332,12 @@ function showDetail(item) {
 }
 
 function showList() {
+	PopupState.currentDetailItemId = "";
+	PopupState.currentDetailItemUrl = "";
+	PopupDom.criticalAnalysisButton.classList.add("hidden");
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
+	persistUiStateIfNeeded();
 	requestAnimationFrame(() => {
 		window.scrollTo(0, PopupState.lastWindowScrollTop);
 		if (document.scrollingElement) {
@@ -234,6 +363,7 @@ function showChangesView(mode = "recent") {
 	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.remove("hidden");
+	persistUiStateIfNeeded();
 }
 
 function showSettingsView() {
@@ -246,6 +376,7 @@ function showSettingsView() {
 	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.changesView.classList.add("hidden");
 	PopupDom.settingsView.classList.remove("hidden");
+	persistUiStateIfNeeded();
 }
 
 function showInitialView() {
@@ -267,9 +398,11 @@ function showInitialView() {
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.add("hidden");
 	PopupDom.initialView.classList.remove("hidden");
+	persistUiStateIfNeeded();
 }
 
 function renderRecentList(items, { mode = "recent" } = {}) {
+	PopupState.currentListItems = Array.isArray(items) ? items : [];
 	const isCriticalMode = mode === "critical";
 	if (!items.length) {
 		PopupDom.recentList.textContent = isCriticalMode
@@ -534,6 +667,7 @@ async function loadMetricsForCurrentSelection() {
 	const sprintId = String(PopupDom.sprintSelect.value || "").trim();
 	if (!sprintId) {
 		PopupRender.showResult("Nenhuma sprint disponível para cálculo.");
+		persistUiStateIfNeeded();
 		return;
 	}
 
@@ -541,10 +675,12 @@ async function loadMetricsForCurrentSelection() {
 	const response = await PopupApi.collectMetrics(sprintId, PopupDom.includeCurrentDayToggle.checked);
 	if (!response?.ok) {
 		PopupRender.showResult(`Erro: ${response?.error || "Falha inesperada."}`);
+		persistUiStateIfNeeded();
 		return;
 	}
 
 	PopupRender.showMetrics(response.metrics);
+	persistUiStateIfNeeded();
 }
 
 async function runMetricsAction() {
@@ -555,7 +691,7 @@ async function runMetricsAction() {
 	}
 }
 
-async function loadRecentChanges() {
+async function loadRecentChanges(savedUiState = null) {
 	PopupDom.recentButton.disabled = true;
 	showChangesView("recent");
 	PopupDom.detailSection.classList.add("hidden");
@@ -568,7 +704,10 @@ async function loadRecentChanges() {
 			PopupDom.recentList.textContent = response?.error || "Erro ao buscar itens.";
 			return;
 		}
-		renderRecentList(response.items || [], { mode: "recent" });
+		const items = response.items || [];
+		renderRecentList(items, { mode: "recent" });
+		restoreDetailIfNeeded(savedUiState, items);
+		persistUiStateIfNeeded();
 	} catch (error) {
 		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
 	} finally {
@@ -576,7 +715,7 @@ async function loadRecentChanges() {
 	}
 }
 
-async function loadCriticalPendingAnalyses() {
+async function loadCriticalPendingAnalyses(savedUiState = null) {
 	PopupDom.criticalPendingButton.disabled = true;
 	showChangesView("critical");
 	PopupDom.detailSection.classList.add("hidden");
@@ -589,7 +728,10 @@ async function loadCriticalPendingAnalyses() {
 			PopupDom.recentList.textContent = response?.error || "Erro ao buscar análises críticas pendentes.";
 			return;
 		}
-		renderRecentList(response.items || [], { mode: "critical" });
+		const items = response.items || [];
+		renderRecentList(items, { mode: "critical" });
+		restoreDetailIfNeeded(savedUiState, items);
+		persistUiStateIfNeeded();
 	} catch (error) {
 		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
 	} finally {
@@ -725,12 +867,38 @@ function bindEvents() {
 	});
 
 	PopupDom.sprintSelect.addEventListener("change", () => {
+		persistUiStateIfNeeded();
 		runMetricsAction();
 	});
 
 	PopupDom.includeCurrentDayToggle.addEventListener("change", () => {
+		persistUiStateIfNeeded();
 		runMetricsAction();
 	});
+
+	window.addEventListener(
+		"scroll",
+		() => {
+			persistUiStateIfNeeded();
+		},
+		{ passive: true },
+	);
+
+	PopupDom.recentList.addEventListener(
+		"scroll",
+		() => {
+			persistUiStateIfNeeded();
+		},
+		{ passive: true },
+	);
+
+	PopupDom.detailDescription.addEventListener(
+		"scroll",
+		() => {
+			persistUiStateIfNeeded();
+		},
+		{ passive: true },
+	);
 
 	PopupDom.recentButton.addEventListener("click", () => {
 		loadRecentChanges();
@@ -805,6 +973,10 @@ function bindEvents() {
 async function init() {
 		PopupRender.showMetricsSkeleton();
 	try {
+		PopupState.isRestoringUiState = true;
+		const savedUiState = await getSavedUiStateSnapshot();
+		applySavedUiStateInputs(savedUiState);
+
 		const savedSettings = await withBlockingUi(async () => {
 			const settings = await loadSavedSettings();
 			await loadTokens(settings.selectedTokenId || "");
@@ -832,15 +1004,42 @@ async function init() {
 		PopupRender.showMetricsSkeleton();
 		await withBlockingUi(async () => {
 			const hasSprints = await loadSprints();
+			const savedSprintId = String(savedUiState?.sprintId || "").trim();
+			if (savedSprintId && Array.from(PopupDom.sprintSelect.options).some((option) => String(option.value) === savedSprintId)) {
+				PopupDom.sprintSelect.value = savedSprintId;
+			}
 			if (!hasSprints) {
 				PopupRender.showResult("Nenhuma sprint disponível para o contexto atual. Verifique as configurações do time/projeto.");
 				return;
 			}
 			await loadMetricsForCurrentSelection();
+
+			if (savedUiState?.view === "changes" || savedUiState?.view === "detail") {
+				if (savedUiState?.listMode === "critical") {
+					await loadCriticalPendingAnalyses(savedUiState);
+				} else {
+					await loadRecentChanges(savedUiState);
+				}
+				return;
+			}
+
+			if (savedUiState?.view === "settings") {
+				showSettingsView();
+				restoreWindowScroll(savedUiState);
+			}
+			if (savedUiState?.view === "token") {
+				showTokenSetupView(PopupState.availableTokens.length > 0);
+				restoreWindowScroll(savedUiState);
+			}
+			if (!savedUiState || savedUiState.view === "initial") {
+				restoreWindowScroll(savedUiState);
+			}
 		});
 	} catch (error) {
 		PopupRender.showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao carregar a extensao."}`);
 	} finally {
+		PopupState.isRestoringUiState = false;
+		persistUiStateIfNeeded();
 		updateTokenFormState();
 		updateSettingsFormState();
 	}
