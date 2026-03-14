@@ -11,6 +11,17 @@
       <span class="loading-spinner" aria-label="Carregando"></span>
     </div>
 
+    <div id="confirmationOverlay" class="confirmation-overlay hidden" aria-hidden="true">
+      <div id="confirmationDialog" class="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="confirmationTitle" aria-describedby="confirmationDescription">
+        <h3 id="confirmationTitle" class="confirmation-title">Confirmar ação</h3>
+        <p id="confirmationDescription" class="confirmation-description">Deseja continuar?</p>
+        <div class="confirmation-actions">
+          <button id="confirmationCancelButton" type="button" class="confirmation-cancel-button">Não</button>
+          <button id="confirmationConfirmButton" type="button" class="confirmation-confirm-button">Sim</button>
+        </div>
+      </div>
+    </div>
+
     <main class="container">
       <section id="initialView" class="view">
         <div class="initial-header">

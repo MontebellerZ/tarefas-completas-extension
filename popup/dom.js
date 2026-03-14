@@ -1,5 +1,11 @@
 window.PopupDom = {
 	loadingOverlay: document.getElementById("loadingOverlay"),
+	confirmationOverlay: document.getElementById("confirmationOverlay"),
+	confirmationDialog: document.getElementById("confirmationDialog"),
+	confirmationTitle: document.getElementById("confirmationTitle"),
+	confirmationDescription: document.getElementById("confirmationDescription"),
+	confirmationCancelButton: document.getElementById("confirmationCancelButton"),
+	confirmationConfirmButton: document.getElementById("confirmationConfirmButton"),
 	recentButton: document.getElementById("recentButton"),
 	criticalPendingButton: document.getElementById("criticalPendingButton"),
 	settingsButton: document.getElementById("settingsButton"),

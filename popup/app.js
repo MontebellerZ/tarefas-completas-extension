@@ -159,6 +159,39 @@ function endLoading() {
 	updateLoadingOverlayState();
 }
 
+function openConfirmationModal({ title, description, confirmText = "Sim", cancelText = "Não" }) {
+	PopupDom.confirmationTitle.textContent = title;
+	PopupDom.confirmationDescription.textContent = description;
+	PopupDom.confirmationConfirmButton.textContent = confirmText;
+	PopupDom.confirmationCancelButton.textContent = cancelText;
+	PopupDom.confirmationOverlay.classList.remove("hidden");
+	PopupDom.confirmationOverlay.setAttribute("aria-hidden", "false");
+	requestAnimationFrame(() => {
+		PopupDom.confirmationCancelButton.focus();
+	});
+}
+
+function closeConfirmationModal(confirmed) {
+	PopupDom.confirmationOverlay.classList.add("hidden");
+	PopupDom.confirmationOverlay.setAttribute("aria-hidden", "true");
+	const resolver = PopupState.confirmationResolver;
+	PopupState.confirmationResolver = null;
+	if (typeof resolver === "function") {
+		resolver(Boolean(confirmed));
+	}
+}
+
+function requestConfirmation(options) {
+	if (PopupState.confirmationResolver) {
+		closeConfirmationModal(false);
+	}
+
+	openConfirmationModal(options);
+	return new Promise((resolve) => {
+		PopupState.confirmationResolver = resolve;
+	});
+}
+
 async function withBlockingUi(action) {
 	beginLoading();
 	try {
@@ -822,7 +855,12 @@ function bindEvents() {
 	PopupDom.deleteTokenButton.addEventListener("click", async () => {
 		const selectedToken = getSelectedToken();
 		if (!selectedToken) return;
-		const confirmed = window.confirm(`Deseja realmente excluir o token \"${selectedToken.name}\"?`);
+		const confirmed = await requestConfirmation({
+			title: "Excluir token",
+			description: `Deseja realmente excluir o token \"${selectedToken.name}\"?`,
+			confirmText: "Sim",
+			cancelText: "Não",
+		});
 		if (!confirmed) return;
 
 		PopupDom.deleteTokenButton.disabled = true;
@@ -938,6 +976,24 @@ function bindEvents() {
 
 	PopupDom.criticalAnalysisButton.addEventListener("click", () => {
 		openItemInAzure(PopupState.currentDetailItemUrl);
+	});
+
+	PopupDom.confirmationCancelButton.addEventListener("click", () => {
+		closeConfirmationModal(false);
+	});
+
+	PopupDom.confirmationConfirmButton.addEventListener("click", () => {
+		closeConfirmationModal(true);
+	});
+
+	PopupDom.confirmationOverlay.addEventListener("click", (event) => {
+		if (event.target === PopupDom.confirmationOverlay) {
+			closeConfirmationModal(false);
+		}
+	});
+
+	PopupDom.confirmationDialog.addEventListener("click", (event) => {
+		event.stopPropagation();
 	});
 
 	PopupDom.saveSettingsButton.addEventListener("click", async () => {

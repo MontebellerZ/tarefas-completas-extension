@@ -7,6 +7,7 @@ window.PopupState = {
 	hasCompleteSettings: false,
 	availableTokens: [],
 	availableUsers: [],
+	confirmationResolver: null,
 	tokenSettingsByTokenId: {},
 	loadingRequests: 0,
 	isRestoringUiState: false,
