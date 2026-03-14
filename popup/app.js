@@ -95,6 +95,21 @@ function renderRecentList(items) {
 	PopupDom.recentSection.classList.remove("hidden");
 }
 
+function updateSettingsFormState() {
+	const tokenName = PopupDom.tokenNameInput.value.trim();
+	const tokenValue = PopupDom.tokenValueInput.value.trim();
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
+	const projectId = String(PopupDom.projectSelect.value || "").trim();
+	const teamId = String(PopupDom.teamSelect.value || "").trim();
+
+	PopupDom.organizationSelect.disabled = !tokenValue;
+	PopupDom.projectSelect.disabled = !organization;
+	PopupDom.teamSelect.disabled = !projectId;
+	PopupDom.userSelect.disabled = !teamId;
+
+	PopupDom.saveSettingsButton.disabled = !(tokenName && tokenValue && organization && projectId && teamId);
+}
+
 async function loadSavedSettings() {
 	const response = await PopupApi.getSettings();
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar configuracoes.");
@@ -110,6 +125,7 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "", selecte
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		updateSettingsFormState();
 		return;
 	}
 
@@ -126,6 +142,8 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "", selecte
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
 	}
+
+	updateSettingsFormState();
 }
 
 async function loadOrganizations(selectedOrganization = "") {
@@ -137,6 +155,7 @@ async function loadOrganizations(selectedOrganization = "") {
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		updateSettingsFormState();
 		return;
 	}
 
@@ -151,6 +170,7 @@ async function loadOrganizations(selectedOrganization = "") {
 	}
 	const preferred = selectedOrganization || response.defaultOrganization || "";
 	PopupRender.populateSelect(PopupDom.organizationSelect, options, "Selecione uma organizacao", preferred);
+	updateSettingsFormState();
 }
 
 async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamId = "", selectedUserId = "") {
@@ -161,6 +181,7 @@ async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamI
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		updateSettingsFormState();
 		return;
 	}
 
@@ -175,6 +196,8 @@ async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamI
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
 	}
+
+	updateSettingsFormState();
 }
 
 async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = PopupDom.teamSelect.value, selectedUserId = "") {
@@ -184,6 +207,7 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 	if (!organization || !tokenValue || !projectId || !teamId) {
 		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		updateSettingsFormState();
 		return;
 	}
 
@@ -192,6 +216,7 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 
 	PopupState.availableUsers = response.users || [];
 	PopupRender.populateSelect(PopupDom.userSelect, PopupState.availableUsers, "Eu mesmo", selectedUserId || "");
+	updateSettingsFormState();
 }
 
 async function saveSettings() {
@@ -269,6 +294,8 @@ async function initializeSettingsView(savedSettings) {
 	} else if (savedSettings.tokenValue) {
 		await loadOrganizations("");
 	}
+
+	updateSettingsFormState();
 }
 
 async function runSettingsAction(action, fallbackMessage) {
@@ -281,6 +308,14 @@ async function runSettingsAction(action, fallbackMessage) {
 }
 
 function bindEvents() {
+	PopupDom.tokenNameInput.addEventListener("input", () => {
+		updateSettingsFormState();
+	});
+
+	PopupDom.tokenValueInput.addEventListener("input", () => {
+		updateSettingsFormState();
+	});
+
 	PopupDom.tokenValueInput.addEventListener("change", async () => {
 		await runSettingsAction(async () => {
 			await loadOrganizations();
@@ -289,15 +324,22 @@ function bindEvents() {
 	});
 
 	PopupDom.organizationSelect.addEventListener("change", async () => {
+		updateSettingsFormState();
 		await runSettingsAction(() => loadProjects(), "Falha ao carregar projetos.");
 	});
 
 	PopupDom.projectSelect.addEventListener("change", async () => {
+		updateSettingsFormState();
 		await runSettingsAction(() => loadTeams(), "Falha ao carregar times.");
 	});
 
 	PopupDom.teamSelect.addEventListener("change", async () => {
+		updateSettingsFormState();
 		await runSettingsAction(() => loadUsers(), "Falha ao carregar usuarios.");
+	});
+
+	PopupDom.userSelect.addEventListener("change", () => {
+		updateSettingsFormState();
 	});
 
 	PopupDom.runButton.addEventListener("click", () => {
@@ -378,7 +420,7 @@ function bindEvents() {
 		} catch (error) {
 			PopupRender.showSettingsStatus(`Erro: ${error instanceof Error ? error.message : "Falha ao salvar configuracoes."}`, true);
 		} finally {
-			PopupDom.saveSettingsButton.disabled = false;
+			updateSettingsFormState();
 		}
 	});
 
@@ -416,6 +458,7 @@ async function init() {
 		PopupRender.showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao carregar a extensao."}`);
 	} finally {
 		PopupDom.runButton.disabled = false;
+		updateSettingsFormState();
 	}
 }
 
