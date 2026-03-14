@@ -6,6 +6,7 @@ window.PopupDom = {
 	confirmationDescription: document.getElementById("confirmationDescription"),
 	confirmationCancelButton: document.getElementById("confirmationCancelButton"),
 	confirmationConfirmButton: document.getElementById("confirmationConfirmButton"),
+	refreshMetricsButton: document.getElementById("refreshMetricsButton"),
 	recentButton: document.getElementById("recentButton"),
 	criticalPendingButton: document.getElementById("criticalPendingButton"),
 	settingsButton: document.getElementById("settingsButton"),

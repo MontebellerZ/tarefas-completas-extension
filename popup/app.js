@@ -724,6 +724,26 @@ async function runMetricsAction() {
 	}
 }
 
+async function refreshSprintsAndMetrics(fallbackMessage = "Falha ao atualizar sprints e métricas.") {
+	if (!PopupState.hasCompleteSettings) {
+		showSettingsView();
+		PopupRender.showSettingsStatus("Configure token, organizacao, projeto e time para atualizar os dados.", true);
+		return;
+	}
+
+	PopupDom.refreshMetricsButton.disabled = true;
+	await runSettingsAction(async () => {
+		PopupRender.showMetricsSkeleton();
+		const hasSprints = await loadSprints();
+		if (!hasSprints) {
+			PopupRender.showResult("Nenhuma sprint disponível para o contexto atual. Verifique as configurações do time/projeto.");
+			return;
+		}
+		await loadMetricsForCurrentSelection();
+	}, fallbackMessage);
+	PopupDom.refreshMetricsButton.disabled = false;
+}
+
 async function loadRecentChanges(savedUiState = null) {
 	PopupDom.recentButton.disabled = true;
 	showChangesView("recent");
@@ -960,6 +980,10 @@ function bindEvents() {
 		}, "Falha ao carregar configuracoes.");
 	});
 
+	PopupDom.refreshMetricsButton.addEventListener("click", async () => {
+		await refreshSprintsAndMetrics("Falha ao atualizar sprints e métricas.");
+	});
+
 	PopupDom.backToInitialButton.addEventListener("click", () => {
 		showInitialView();
 	});
@@ -972,15 +996,7 @@ function bindEvents() {
 		}
 
 		PopupState.shouldReloadMetricsAfterTokenDeletion = false;
-		await runSettingsAction(async () => {
-			PopupRender.showMetricsSkeleton();
-			const hasSprints = await loadSprints();
-			if (!hasSprints) {
-				PopupRender.showResult("Nenhuma sprint disponível para o contexto atual. Verifique as configurações do time/projeto.");
-				return;
-			}
-			await loadMetricsForCurrentSelection();
-		}, "Falha ao recarregar sprints e métricas após exclusão de token.");
+		await refreshSprintsAndMetrics("Falha ao recarregar sprints e métricas após exclusão de token.");
 	});
 
 	PopupDom.backArrowButton.addEventListener("click", () => {

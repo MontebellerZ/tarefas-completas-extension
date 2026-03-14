@@ -156,6 +156,12 @@ h1 {
   gap: 8px;
 }
 
+.initial-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .settings-icon-button {
   background: #e8f3ff;
   color: #0f6cbd;
@@ -175,6 +181,10 @@ h1 {
   background: #eef2f8;
   color: #8ba4be;
   cursor: wait;
+}
+
+.refresh-icon-button {
+  font-size: 17px;
 }
 
 .icon-action-button {
