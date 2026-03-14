@@ -48,14 +48,15 @@ function getTotalPagesForCurrentList() {
 }
 
 function updatePaginationControls() {
+	const totalItems = PopupState.currentListItems.length;
 	const totalPages = getTotalPagesForCurrentList();
 	PopupState.currentListPage = Math.min(Math.max(1, PopupState.currentListPage), totalPages);
 	PopupDom.previousPageButton.disabled = PopupState.currentListPage <= 1;
 	PopupDom.nextPageButton.disabled = PopupState.currentListPage >= totalPages;
 	PopupDom.previousPageButtonBottom.disabled = PopupState.currentListPage <= 1;
 	PopupDom.nextPageButtonBottom.disabled = PopupState.currentListPage >= totalPages;
-	PopupDom.paginationStatus.textContent = `Página ${PopupState.currentListPage} de ${totalPages}`;
-	PopupDom.paginationStatusBottom.textContent = `Página ${PopupState.currentListPage} de ${totalPages}`;
+	PopupDom.paginationStatus.textContent = `Página ${PopupState.currentListPage} de ${totalPages} • ${totalItems} itens`;
+	PopupDom.paginationStatusBottom.textContent = `Página ${PopupState.currentListPage} de ${totalPages} • ${totalItems} itens`;
 	PopupDom.itemsPerPageSelect.value = String(normalizeItemsPerPage(PopupState.itemsPerPage));
 	PopupDom.itemsPerPageSelectBottom.value = String(normalizeItemsPerPage(PopupState.itemsPerPage));
 }
