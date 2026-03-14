@@ -246,3 +246,32 @@ async function collectMetrics(sprintId, includeCurrentDay) {
 		selectedSprintLabel: sprint.label,
 	};
 }
+
+async function listSprintItemsByMetricBucket(sprintId, metricBucket) {
+	const dataset = await loadSprintDataset();
+	const sprint = dataset.sprints.find((item) => String(item.id) === String(sprintId));
+
+	if (!sprint) {
+		throw new Error("Sprint selecionada nao encontrada.");
+	}
+
+	const bucket = String(metricBucket || "").trim().toLowerCase();
+	const pendingStates = new Set(["to do", "approved", "to refactor", "in progress", "pause"]);
+	const validatingStates = new Set(["to test"]);
+	const finishedStates = new Set(["to release", "to review", "done"]);
+
+	let filtered = [];
+	if (bucket === "started") {
+		filtered = [...sprint.workedItems];
+	} else if (bucket === "pending") {
+		filtered = sprint.workedItems.filter((item) => pendingStates.has(String(item?.state || "").trim().toLowerCase()));
+	} else if (bucket === "validating") {
+		filtered = sprint.workedItems.filter((item) => validatingStates.has(String(item?.state || "").trim().toLowerCase()));
+	} else if (bucket === "finished") {
+		filtered = sprint.workedItems.filter((item) => finishedStates.has(String(item?.state || "").trim().toLowerCase()));
+	} else {
+		throw new Error("Tipo de métrica inválido para listagem de itens.");
+	}
+
+	return filtered.sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0));
+}

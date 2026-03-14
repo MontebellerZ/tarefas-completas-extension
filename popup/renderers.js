@@ -46,9 +46,12 @@ function getAverageFeedback(dailyAverage) {
 	};
 }
 
-function createMetricTile(title, value, valueClass) {
+function createMetricTile(title, value, valueClass, metricBucket = "") {
+	const bucket = String(metricBucket || "").trim();
+	const clickableClass = bucket ? " metric-tile-clickable" : "";
+	const dataMetricBucket = bucket ? ` data-metric-bucket="${bucket}"` : "";
 	return `
-		<div class="metric-tile">
+		<div class="metric-tile${clickableClass}"${dataMetricBucket}>
 			<div class="metric-title">${title}</div>
 			<div class="metric-value ${valueClass}">${value}</div>
 		</div>
@@ -99,10 +102,10 @@ function renderMetrics(metrics) {
 		<div class="metrics-wrap">
 			<div class="metrics-sprint-title">Tarefas - ${sprintLabel}</div>
 			<div class="metrics-grid metrics-grid-primary">
-				${createMetricTile("Iniciadas", String(startedTasks), "metric-value-lilac")}
-				${createMetricTile("Andamento", String(pendingTasks), "metric-value-blue")}
-				${createMetricTile("Validando", String(validatingTasks), "metric-value-yellow")}
-				${createMetricTile("Finalizadas", String(finishedTasks), "metric-value-green")}
+				${createMetricTile("Iniciadas", String(startedTasks), "metric-value-lilac", "started")}
+				${createMetricTile("Andamento", String(pendingTasks), "metric-value-blue", "pending")}
+				${createMetricTile("Validando", String(validatingTasks), "metric-value-yellow", "validating")}
+				${createMetricTile("Finalizadas", String(finishedTasks), "metric-value-green", "finished")}
 			</div>
 			<div class="metrics-grid metrics-grid-secondary">
 				${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}

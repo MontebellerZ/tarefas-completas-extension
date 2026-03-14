@@ -8,6 +8,31 @@ function openItemInAzure(url) {
 }
 
 const UI_STATE_STORAGE_KEY = "popupUiState";
+const LIST_MODE_TITLES = {
+	recent: "Alterações desde o último dia útil",
+	critical: "Análises críticas pendentes",
+	"metric:started": "Tarefas iniciadas",
+	"metric:pending": "Tarefas em andamento",
+	"metric:validating": "Tarefas em validação",
+	"metric:finished": "Tarefas finalizadas",
+};
+
+const LIST_MODE_EMPTY_MESSAGES = {
+	recent: "Nenhum item alterado encontrado no periodo.",
+	critical: "Nenhuma análise crítica pendente encontrada nas últimas 3 sprints.",
+	"metric:started": "Nenhuma tarefa iniciada encontrada para a sprint selecionada.",
+	"metric:pending": "Nenhuma tarefa em andamento encontrada para a sprint selecionada.",
+	"metric:validating": "Nenhuma tarefa em validação encontrada para a sprint selecionada.",
+	"metric:finished": "Nenhuma tarefa finalizada encontrada para a sprint selecionada.",
+};
+
+function getListTitleByMode(mode) {
+	return LIST_MODE_TITLES[mode] || LIST_MODE_TITLES.recent;
+}
+
+function getListEmptyMessageByMode(mode) {
+	return LIST_MODE_EMPTY_MESSAGES[mode] || LIST_MODE_EMPTY_MESSAGES.recent;
+}
 
 function getCurrentWindowScrollTop() {
 	return Number(
@@ -388,8 +413,7 @@ function showChangesView(mode = "recent") {
 	}
 
 	PopupState.currentListMode = mode;
-	PopupDom.changesViewTitle.textContent =
-		mode === "critical" ? "Análises críticas pendentes" : "Alterações desde o último dia útil";
+	PopupDom.changesViewTitle.textContent = getListTitleByMode(mode);
 	PopupDom.criticalAnalysisButton.classList.add("hidden");
 
 	PopupDom.initialView.classList.add("hidden");
@@ -438,9 +462,7 @@ function renderRecentList(items, { mode = "recent" } = {}) {
 	PopupState.currentListItems = Array.isArray(items) ? items : [];
 	const isCriticalMode = mode === "critical";
 	if (!items.length) {
-		PopupDom.recentList.textContent = isCriticalMode
-			? "Nenhuma análise crítica pendente encontrada nas últimas 3 sprints."
-			: "Nenhum item alterado encontrado no periodo.";
+		PopupDom.recentList.textContent = getListEmptyMessageByMode(mode);
 		PopupDom.detailSection.classList.add("hidden");
 		PopupDom.recentSection.classList.remove("hidden");
 		return;
@@ -457,6 +479,35 @@ function renderRecentList(items, { mode = "recent" } = {}) {
 
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
+}
+
+async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
+	const bucket = String(metricBucket || "").trim().toLowerCase();
+	const mode = `metric:${bucket}`;
+	showChangesView(mode);
+	PopupDom.detailSection.classList.add("hidden");
+	PopupDom.recentSection.classList.remove("hidden");
+	PopupRender.showRecentChangesSkeleton(3, { mode: "recent" });
+
+	const sprintId = String(PopupDom.sprintSelect.value || "").trim();
+	if (!sprintId) {
+		PopupDom.recentList.textContent = "Selecione uma sprint para listar as tarefas dessa métrica.";
+		return;
+	}
+
+	try {
+		const response = await PopupApi.listSprintItemsByMetricBucket(sprintId, bucket);
+		if (!response?.ok) {
+			PopupDom.recentList.textContent = response?.error || "Erro ao buscar tarefas da métrica selecionada.";
+			return;
+		}
+		const items = response.items || [];
+		renderRecentList(items, { mode });
+		restoreDetailIfNeeded(savedUiState, items);
+		persistUiStateIfNeeded();
+	} catch (error) {
+		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
+	}
 }
 
 function updateTokenFormState() {
@@ -936,6 +987,14 @@ function bindEvents() {
 		runMetricsAction();
 	});
 
+	PopupDom.result.addEventListener("click", (event) => {
+		const tile = event.target?.closest?.("[data-metric-bucket]");
+		if (!tile) return;
+		const metricBucket = String(tile.getAttribute("data-metric-bucket") || "").trim();
+		if (!metricBucket) return;
+		loadMetricItemsByBucket(metricBucket);
+	});
+
 	window.addEventListener(
 		"scroll",
 		() => {
@@ -1106,6 +1165,9 @@ async function init() {
 			if (savedUiState?.view === "changes" || savedUiState?.view === "detail") {
 				if (savedUiState?.listMode === "critical") {
 					await loadCriticalPendingAnalyses(savedUiState);
+				} else if (String(savedUiState?.listMode || "").startsWith("metric:")) {
+					const metricBucket = String(savedUiState.listMode).slice("metric:".length);
+					await loadMetricItemsByBucket(metricBucket, savedUiState);
 				} else {
 					await loadRecentChanges(savedUiState);
 				}

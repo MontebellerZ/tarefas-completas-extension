@@ -21,6 +21,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		"listUsers",
 		"listSprints",
 		"openAzureAndCollect",
+		"listSprintItemsByMetricBucket",
 		"listRecentChanges",
 		"listCriticalPendingAnalyses",
 	]);
@@ -69,6 +70,12 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					sendResponse({
 						ok: true,
 						metrics: await collectMetrics(message.sprintId, Boolean(message.includeCurrentDay)),
+					});
+					break;
+				case "listSprintItemsByMetricBucket":
+					sendResponse({
+						ok: true,
+						items: await listSprintItemsByMetricBucket(message.sprintId, message.metricBucket),
 					});
 					break;
 				case "listRecentChanges":

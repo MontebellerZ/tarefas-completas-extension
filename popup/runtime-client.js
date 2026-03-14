@@ -29,6 +29,8 @@ window.PopupApi = {
 	listSprints: () => sendRuntimeMessage({ action: "listSprints" }),
 	collectMetrics: (sprintId, includeCurrentDay) =>
 		sendRuntimeMessage({ action: "openAzureAndCollect", sprintId, includeCurrentDay }),
+	listSprintItemsByMetricBucket: (sprintId, metricBucket) =>
+		sendRuntimeMessage({ action: "listSprintItemsByMetricBucket", sprintId, metricBucket }),
 	listRecentChanges: () => sendRuntimeMessage({ action: "listRecentChanges" }),
 	listCriticalPendingAnalyses: () => sendRuntimeMessage({ action: "listCriticalPendingAnalyses" }),
 };
