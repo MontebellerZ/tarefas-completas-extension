@@ -148,7 +148,14 @@ function buildItemCard(item, { clickable = true } = {}) {
 }
 
 function populateSprintSelect(sprints, defaultSprint) {
-	populateSelect(PopupDom.sprintSelect, sprints || [], "Selecione uma sprint", defaultSprint || "");
+	PopupDom.sprintSelect.innerHTML = "";
+	for (const sprint of sprints || []) {
+		const option = document.createElement("option");
+		option.value = sprint.value;
+		option.textContent = sprint.label;
+		PopupDom.sprintSelect.appendChild(option);
+	}
+	PopupDom.sprintSelect.value = defaultSprint || "";
 }
 
 function formatMetrics(metrics) {
