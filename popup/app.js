@@ -21,6 +21,149 @@ function clearTokenForm() {
 	PopupDom.tokenStatus.classList.add("hidden");
 }
 
+function updateLoadingOverlayState() {
+	const isLoading = PopupState.loadingRequests > 0;
+	PopupDom.loadingOverlay.classList.toggle("hidden", !isLoading);
+	PopupDom.loadingOverlay.setAttribute("aria-hidden", String(!isLoading));
+}
+
+function beginLoading() {
+	PopupState.loadingRequests += 1;
+	updateLoadingOverlayState();
+}
+
+function endLoading() {
+	PopupState.loadingRequests = Math.max(0, PopupState.loadingRequests - 1);
+	updateLoadingOverlayState();
+}
+
+async function withBlockingUi(action) {
+	beginLoading();
+	try {
+		return await action();
+	} finally {
+		endLoading();
+	}
+}
+
+function getTokenScopedSettingsByTokenId(tokenId) {
+	const key = String(tokenId || "").trim();
+	if (!key) {
+		return {
+			organization: "",
+			projectId: "",
+			projectName: "",
+			teamId: "",
+			teamName: "",
+			selectedUserId: "",
+			selectedUserName: "",
+			selectedUserUniqueName: "",
+			selectedUserDescriptor: "",
+		};
+	}
+
+	return {
+		organization: String(PopupState.tokenSettingsByTokenId[key]?.organization || "").trim(),
+		projectId: String(PopupState.tokenSettingsByTokenId[key]?.projectId || "").trim(),
+		projectName: String(PopupState.tokenSettingsByTokenId[key]?.projectName || "").trim(),
+		teamId: String(PopupState.tokenSettingsByTokenId[key]?.teamId || "").trim(),
+		teamName: String(PopupState.tokenSettingsByTokenId[key]?.teamName || "").trim(),
+		selectedUserId: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserId || "").trim(),
+		selectedUserName: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserName || "").trim(),
+		selectedUserUniqueName: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserUniqueName || "").trim(),
+		selectedUserDescriptor: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserDescriptor || "").trim(),
+	};
+}
+
+function getSelectedUserValue(settings = {}) {
+	return String(settings.selectedUserId || settings.selectedUserDescriptor || settings.selectedUserUniqueName || "").trim();
+}
+
+function populateEmptySettingsSelects() {
+	PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", "");
+	PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
+	PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
+	PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+	PopupState.availableUsers = [];
+}
+
+function previewTokenScopedSettings(settings = {}) {
+	const organization = String(settings.organization || "").trim();
+	const projectId = String(settings.projectId || "").trim();
+	const projectName = String(settings.projectName || projectId || "").trim();
+	const teamId = String(settings.teamId || "").trim();
+	const teamName = String(settings.teamName || teamId || "").trim();
+	const userValue = getSelectedUserValue(settings);
+	const userName = String(settings.selectedUserName || userValue || "").trim();
+
+	PopupRender.populateSelect(
+		PopupDom.organizationSelect,
+		organization ? [{ value: organization, label: organization, name: organization }] : [],
+		"Selecione uma organizacao",
+		organization,
+	);
+	PopupRender.populateSelect(
+		PopupDom.projectSelect,
+		projectId ? [{ value: projectId, label: projectName, id: projectId, name: projectName }] : [],
+		"Selecione um projeto",
+		projectId,
+	);
+	PopupRender.populateSelect(
+		PopupDom.teamSelect,
+		teamId ? [{ value: teamId, label: teamName, id: teamId, name: teamName }] : [],
+		"Selecione um time",
+		teamId,
+	);
+	PopupRender.populateSelect(
+		PopupDom.userSelect,
+		userValue ? [{ value: userValue, label: userName, id: settings.selectedUserId || userValue, name: userName }] : [],
+		"Eu mesmo",
+		userValue,
+	);
+
+	PopupState.availableUsers = userValue
+		? [
+			{
+				value: userValue,
+				id: settings.selectedUserId || userValue,
+				name: userName,
+				uniqueName: settings.selectedUserUniqueName || "",
+				descriptor: settings.selectedUserDescriptor || "",
+			},
+		]
+		: [];
+}
+
+async function loadTokenScopedSettings(tokenId, { shouldRefreshFromStorage = false } = {}) {
+	const selectedTokenId = String(tokenId || "").trim();
+	if (!selectedTokenId) {
+		populateEmptySettingsSelects();
+		updateSettingsFormState();
+		return;
+	}
+
+	if (shouldRefreshFromStorage) {
+		const savedSettings = await loadSavedSettings();
+		PopupState.tokenSettingsByTokenId = savedSettings.tokenConfigurations || {};
+	}
+
+	const scopedSettings = getTokenScopedSettingsByTokenId(selectedTokenId);
+	const selectedUserValue = getSelectedUserValue(scopedSettings);
+	previewTokenScopedSettings(scopedSettings);
+
+	await loadOrganizations(scopedSettings.organization || "");
+	if (scopedSettings.organization) {
+		await loadProjects(scopedSettings.projectId || "", scopedSettings.teamId || "", selectedUserValue);
+	} else {
+		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
+		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
+		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
+		PopupState.availableUsers = [];
+	}
+
+	updateSettingsFormState();
+}
+
 function showTokenSetupView(allowBack) {
 	PopupDom.initialView.classList.add("hidden");
 	PopupDom.settingsView.classList.add("hidden");
@@ -161,6 +304,7 @@ function updateSettingsFormState() {
 async function loadSavedSettings() {
 	const response = await PopupApi.getSettings();
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar configuracoes.");
+	PopupState.tokenSettingsByTokenId = response.tokenConfigurations || {};
 	return response;
 }
 
@@ -191,7 +335,13 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "", selecte
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar projetos.");
 
 	PopupDom.organizationSelect.value = response.organization || organization;
-	PopupRender.populateSelect(PopupDom.projectSelect, response.projects || [], "Selecione um projeto", selectedProjectId);
+	const projectOptions = [...(response.projects || [])];
+	const selectedProjectLabel =
+		PopupDom.projectSelect.options[PopupDom.projectSelect.selectedIndex]?.text || selectedProjectId || "";
+	if (selectedProjectId && !projectOptions.some((entry) => String(entry.value) === String(selectedProjectId))) {
+		projectOptions.unshift({ value: selectedProjectId, label: selectedProjectLabel, id: selectedProjectId, name: selectedProjectLabel });
+	}
+	PopupRender.populateSelect(PopupDom.projectSelect, projectOptions, "Selecione um projeto", selectedProjectId);
 
 	if (selectedProjectId) {
 		await loadTeams(selectedProjectId, selectedTeamId, selectedUserId);
@@ -224,7 +374,7 @@ async function loadOrganizations(selectedOrganization = "") {
 	if (selectedOrganization && !options.some((entry) => String(entry.value) === String(selectedOrganization))) {
 		options.unshift({ value: selectedOrganization, label: selectedOrganization, name: selectedOrganization });
 	}
-	const preferred = selectedOrganization || response.defaultOrganization || "";
+	const preferred = selectedOrganization || "";
 	PopupRender.populateSelect(PopupDom.organizationSelect, options, "Selecione uma organizacao", preferred);
 	updateSettingsFormState();
 }
@@ -244,7 +394,12 @@ async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamI
 	const response = await PopupApi.listTeams(organization, projectId, tokenValue);
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar times.");
 
-	PopupRender.populateSelect(PopupDom.teamSelect, response.teams || [], "Selecione um time", selectedTeamId);
+	const teamOptions = [...(response.teams || [])];
+	const selectedTeamLabel = PopupDom.teamSelect.options[PopupDom.teamSelect.selectedIndex]?.text || selectedTeamId || "";
+	if (selectedTeamId && !teamOptions.some((entry) => String(entry.value) === String(selectedTeamId))) {
+		teamOptions.unshift({ value: selectedTeamId, label: selectedTeamLabel, id: selectedTeamId, name: selectedTeamLabel });
+	}
+	PopupRender.populateSelect(PopupDom.teamSelect, teamOptions, "Selecione um time", selectedTeamId);
 
 	if (selectedTeamId) {
 		await loadUsers(projectId, selectedTeamId, selectedUserId);
@@ -270,7 +425,20 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 	const response = await PopupApi.listUsers(organization, projectId, teamId, tokenValue);
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar usuarios.");
 
-	PopupState.availableUsers = response.users || [];
+	const userOptions = [...(response.users || [])];
+	const selectedUserLabel = PopupDom.userSelect.options[PopupDom.userSelect.selectedIndex]?.text || selectedUserId || "";
+	if (selectedUserId && !userOptions.some((entry) => String(entry.value) === String(selectedUserId))) {
+		userOptions.unshift({
+			value: selectedUserId,
+			label: selectedUserLabel,
+			id: selectedUserId,
+			name: selectedUserLabel,
+			uniqueName: "",
+			descriptor: "",
+		});
+	}
+
+	PopupState.availableUsers = userOptions;
 	PopupRender.populateSelect(PopupDom.userSelect, PopupState.availableUsers, "Eu mesmo", selectedUserId || "");
 	updateSettingsFormState();
 }
@@ -299,6 +467,21 @@ async function saveCurrentSettings() {
 	});
 
 	if (!response?.ok) throw new Error(response?.error || "Falha ao salvar configuracoes.");
+
+	const selectedTokenId = String(selectedToken?.id || selectedToken?.value || PopupDom.tokenSelect.value || "").trim();
+	if (selectedTokenId) {
+		PopupState.tokenSettingsByTokenId[selectedTokenId] = {
+			organization,
+			projectId,
+			projectName,
+			teamId,
+			teamName,
+			selectedUserId: selectedUser?.id || selectedUserId || "",
+			selectedUserName: selectedUser?.name || "",
+			selectedUserUniqueName: selectedUser?.uniqueName || "",
+			selectedUserDescriptor: selectedUser?.descriptor || "",
+		};
+	}
 }
 
 async function saveCurrentToken() {
@@ -348,19 +531,14 @@ async function loadRecentChanges() {
 async function initializeSettingsView(savedSettings) {
 	PopupRender.applySettingsToInputs(savedSettings);
 	await loadTokens(savedSettings.selectedTokenId || "");
-	PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organizacao", savedSettings.organization || "");
-	PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
-	PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
-	const selectedUserValue = savedSettings.selectedUserId || savedSettings.selectedUserDescriptor || savedSettings.selectedUserUniqueName || "";
-	PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", selectedUserValue);
-	PopupState.availableUsers = [];
-
-	if (PopupState.availableTokens.length && savedSettings.selectedTokenId) {
-		await loadOrganizations(savedSettings.organization || "");
-		if (savedSettings.organization) {
-			await loadProjects(savedSettings.projectId || "", savedSettings.teamId || "", selectedUserValue);
-		}
+	if (!PopupState.availableTokens.length) {
+		populateEmptySettingsSelects();
+		updateSettingsFormState();
+		return;
 	}
+
+	const selectedTokenId = String(PopupDom.tokenSelect.value || savedSettings.selectedTokenId || "").trim();
+	await loadTokenScopedSettings(selectedTokenId);
 
 	updateSettingsFormState();
 }
@@ -368,7 +546,7 @@ async function initializeSettingsView(savedSettings) {
 async function runSettingsAction(action, fallbackMessage) {
 	PopupDom.settingsStatus.classList.add("hidden");
 	try {
-		await action();
+		await withBlockingUi(action);
 	} catch (error) {
 		PopupRender.showSettingsStatus(`Erro: ${error instanceof Error ? error.message : fallbackMessage}`, true);
 	}
@@ -377,7 +555,7 @@ async function runSettingsAction(action, fallbackMessage) {
 async function runTokenAction(action, fallbackMessage) {
 	PopupDom.tokenStatus.classList.add("hidden");
 	try {
-		await action();
+		await withBlockingUi(action);
 	} catch (error) {
 		PopupRender.showTokenStatus(`Erro: ${error instanceof Error ? error.message : fallbackMessage}`, true);
 	}
@@ -420,8 +598,7 @@ function bindEvents() {
 	PopupDom.tokenSelect.addEventListener("change", async () => {
 		updateSettingsFormState();
 		await runSettingsAction(async () => {
-			await loadOrganizations("");
-			await loadProjects();
+			await loadTokenScopedSettings(PopupDom.tokenSelect.value);
 		}, "Falha ao carregar organizacoes/projetos.");
 	});
 
@@ -563,8 +740,11 @@ function bindEvents() {
 async function init() {
 	PopupDom.runButton.disabled = true;
 	try {
-		const savedSettings = await loadSavedSettings();
-		await loadTokens(savedSettings.selectedTokenId || "");
+		const savedSettings = await withBlockingUi(async () => {
+			const settings = await loadSavedSettings();
+			await loadTokens(settings.selectedTokenId || "");
+			return settings;
+		});
 
 		if (!PopupState.availableTokens.length) {
 			PopupState.hasCompleteSettings = false;
@@ -574,7 +754,7 @@ async function init() {
 			return;
 		}
 
-		await initializeSettingsView(savedSettings);
+		await withBlockingUi(() => initializeSettingsView(savedSettings));
 
 		if (!PopupRender.isCompleteSettings(savedSettings)) {
 			PopupState.hasCompleteSettings = false;
@@ -584,7 +764,7 @@ async function init() {
 		}
 
 		PopupState.hasCompleteSettings = true;
-		await loadSprints();
+		await withBlockingUi(() => loadSprints());
 	} catch (error) {
 		PopupRender.showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao carregar a extensao."}`);
 	} finally {

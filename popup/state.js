@@ -4,4 +4,6 @@ window.PopupState = {
 	hasCompleteSettings: false,
 	availableTokens: [],
 	availableUsers: [],
+	tokenSettingsByTokenId: {},
+	loadingRequests: 0,
 };

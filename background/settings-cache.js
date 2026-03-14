@@ -32,6 +32,76 @@ function clearScopedSelections(settings) {
 	};
 }
 
+const TOKEN_SCOPED_FIELDS = [
+	"organization",
+	"projectId",
+	"projectName",
+	"teamId",
+	"teamName",
+	"selectedUserId",
+	"selectedUserName",
+	"selectedUserUniqueName",
+	"selectedUserDescriptor",
+];
+
+function getEmptyTokenScopedSettings() {
+	return {
+		organization: "",
+		projectId: "",
+		projectName: "",
+		teamId: "",
+		teamName: "",
+		selectedUserId: "",
+		selectedUserName: "",
+		selectedUserUniqueName: "",
+		selectedUserDescriptor: "",
+	};
+}
+
+function normalizeTokenScopedSettings(rawScopedSettings = {}) {
+	const normalized = getEmptyTokenScopedSettings();
+	for (const field of TOKEN_SCOPED_FIELDS) {
+		normalized[field] = String(rawScopedSettings?.[field] || "").trim();
+	}
+	normalized.organization = normalizeOrganization(normalized.organization);
+	return normalized;
+}
+
+function selectTokenScopedSettings(settings, tokenId) {
+	const selectedTokenId = String(tokenId || "").trim();
+	if (!selectedTokenId) return getEmptyTokenScopedSettings();
+	const scoped = settings?.tokenConfigurations?.[selectedTokenId] || {};
+	return normalizeTokenScopedSettings(scoped);
+}
+
+function applyScopedToSettings(settings, scoped) {
+	return {
+		...settings,
+		...normalizeTokenScopedSettings(scoped),
+	};
+}
+
+function normalizeTokenConfigurations(rawConfigurations, tokens, fallbackScoped, selectedTokenId) {
+	const normalized = {};
+	const source = rawConfigurations && typeof rawConfigurations === "object" ? rawConfigurations : {};
+	const allowedTokenIds = new Set(tokens.map((token) => token.id));
+
+	for (const [tokenId, scoped] of Object.entries(source)) {
+		if (!allowedTokenIds.has(tokenId)) continue;
+		normalized[tokenId] = normalizeTokenScopedSettings(scoped);
+	}
+
+	if (selectedTokenId && allowedTokenIds.has(selectedTokenId) && !normalized[selectedTokenId]) {
+		const fallback = normalizeTokenScopedSettings(fallbackScoped || {});
+		const hasAnyValue = TOKEN_SCOPED_FIELDS.some((field) => Boolean(String(fallback[field] || "").trim()));
+		if (hasAnyValue) {
+			normalized[selectedTokenId] = fallback;
+		}
+	}
+
+	return normalized;
+}
+
 function normalizeStoredSettings(rawSettings = {}) {
 	const base = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
 	let tokens = sanitizeTokens(base.tokens);
@@ -48,14 +118,17 @@ function normalizeStoredSettings(rawSettings = {}) {
 
 	const selectedTokenId = String(base.selectedTokenId || tokens[0]?.id || "").trim();
 	const selectedToken = tokens.find((token) => token.id === selectedTokenId) || tokens[0] || null;
+	const tokenConfigurations = normalizeTokenConfigurations(base.tokenConfigurations, tokens, base, selectedToken?.id || "");
+	const selectedScoped = selectTokenScopedSettings({ tokenConfigurations }, selectedToken?.id || "");
 
-	return {
+	return applyScopedToSettings({
 		...base,
 		tokens,
 		selectedTokenId: selectedToken?.id || "",
 		tokenName: selectedToken?.name || "",
 		tokenValue: selectedToken?.value || "",
-	};
+		tokenConfigurations,
+	}, selectedScoped);
 }
 
 async function getStoredSettingsValue() {
@@ -86,15 +159,22 @@ async function getSettings() {
 async function saveSettings(settings) {
 	const current = normalizeStoredSettings(await getStoredSettingsValue());
 	const selectedTokenId = String(settings?.selectedTokenId ?? current.selectedTokenId ?? "").trim();
-	const merged = {
+	const merged = applyScopedToSettings({
 		...current,
 		...settings,
 		tokens: current.tokens,
 		selectedTokenId,
-	};
-	merged.organization = normalizeOrganization(merged.organization);
-	const tokenChanged = selectedTokenId !== current.selectedTokenId;
-	await persistSettings(tokenChanged ? clearScopedSelections(merged) : merged);
+		tokenConfigurations: {
+			...(current.tokenConfigurations || {}),
+		},
+	}, settings || {});
+
+	if (selectedTokenId) {
+		merged.tokenConfigurations[selectedTokenId] = normalizeTokenScopedSettings(merged);
+	}
+
+	const selectedScoped = selectTokenScopedSettings(merged, selectedTokenId);
+	await persistSettings(applyScopedToSettings(merged, selectedScoped));
 }
 
 async function listTokens() {
@@ -120,11 +200,15 @@ async function saveToken(token) {
 	}
 
 	const nextToken = { id: createTokenId(), name, value };
-	const nextSettings = clearScopedSelections({
+	const nextSettings = applyScopedToSettings({
 		...current,
 		tokens: [...current.tokens, nextToken],
 		selectedTokenId: nextToken.id,
-	});
+		tokenConfigurations: {
+			...(current.tokenConfigurations || {}),
+			[nextToken.id]: getEmptyTokenScopedSettings(),
+		},
+	}, getEmptyTokenScopedSettings());
 	await persistSettings(nextSettings);
 	return { tokenId: nextToken.id };
 }
@@ -133,12 +217,20 @@ async function deleteToken(tokenId) {
 	const current = normalizeStoredSettings(await getStoredSettingsValue());
 	const nextTokens = current.tokens.filter((token) => token.id !== tokenId);
 	const nextSelectedToken = nextTokens[0] || null;
-	const nextSettings = clearScopedSelections({
+	const nextConfigurations = { ...(current.tokenConfigurations || {}) };
+	delete nextConfigurations[tokenId];
+	const nextSettings = {
 		...current,
 		tokens: nextTokens,
 		selectedTokenId: nextSelectedToken?.id || "",
-	});
-	await persistSettings(nextSettings);
+		tokenConfigurations: nextConfigurations,
+	};
+	const selectedScoped = selectTokenScopedSettings(nextSettings, nextSelectedToken?.id || "");
+	const normalizedSettings = applyScopedToSettings(nextSettings, selectedScoped);
+	if (!nextSelectedToken) {
+		Object.assign(normalizedSettings, getEmptyTokenScopedSettings());
+	}
+	await persistSettings(normalizedSettings);
 	return { hasTokens: nextTokens.length > 0, selectedTokenId: nextSelectedToken?.id || "" };
 }
 

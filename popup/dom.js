@@ -1,4 +1,5 @@
 window.PopupDom = {
+	loadingOverlay: document.getElementById("loadingOverlay"),
 	runButton: document.getElementById("runButton"),
 	recentButton: document.getElementById("recentButton"),
 	settingsButton: document.getElementById("settingsButton"),
