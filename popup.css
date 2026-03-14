@@ -539,6 +539,10 @@ button:disabled {
   gap: 10px;
 }
 
+.list-pagination-controls-bottom {
+  margin-top: -2px;
+}
+
 .pagination-navigation {
   display: inline-flex;
   align-items: center;

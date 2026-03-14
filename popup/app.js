@@ -52,8 +52,12 @@ function updatePaginationControls() {
 	PopupState.currentListPage = Math.min(Math.max(1, PopupState.currentListPage), totalPages);
 	PopupDom.previousPageButton.disabled = PopupState.currentListPage <= 1;
 	PopupDom.nextPageButton.disabled = PopupState.currentListPage >= totalPages;
+	PopupDom.previousPageButtonBottom.disabled = PopupState.currentListPage <= 1;
+	PopupDom.nextPageButtonBottom.disabled = PopupState.currentListPage >= totalPages;
 	PopupDom.paginationStatus.textContent = `Página ${PopupState.currentListPage} de ${totalPages}`;
+	PopupDom.paginationStatusBottom.textContent = `Página ${PopupState.currentListPage} de ${totalPages}`;
 	PopupDom.itemsPerPageSelect.value = String(normalizeItemsPerPage(PopupState.itemsPerPage));
+	PopupDom.itemsPerPageSelectBottom.value = String(normalizeItemsPerPage(PopupState.itemsPerPage));
 }
 
 function getCurrentWindowScrollTop() {
@@ -1095,8 +1099,27 @@ function bindEvents() {
 		renderCurrentListPage({ mode: PopupState.currentListMode });
 	});
 
+	PopupDom.previousPageButtonBottom.addEventListener("click", () => {
+		if (PopupState.currentListPage <= 1) return;
+		PopupState.currentListPage -= 1;
+		renderCurrentListPage({ mode: PopupState.currentListMode });
+	});
+
+	PopupDom.nextPageButtonBottom.addEventListener("click", () => {
+		const totalPages = getTotalPagesForCurrentList();
+		if (PopupState.currentListPage >= totalPages) return;
+		PopupState.currentListPage += 1;
+		renderCurrentListPage({ mode: PopupState.currentListMode });
+	});
+
 	PopupDom.itemsPerPageSelect.addEventListener("change", () => {
 		PopupState.itemsPerPage = normalizeItemsPerPage(PopupDom.itemsPerPageSelect.value);
+		PopupState.currentListPage = 1;
+		renderCurrentListPage({ mode: PopupState.currentListMode });
+	});
+
+	PopupDom.itemsPerPageSelectBottom.addEventListener("change", () => {
+		PopupState.itemsPerPage = normalizeItemsPerPage(PopupDom.itemsPerPageSelectBottom.value);
 		PopupState.currentListPage = 1;
 		renderCurrentListPage({ mode: PopupState.currentListMode });
 	});
