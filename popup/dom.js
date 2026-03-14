@@ -1,6 +1,7 @@
 window.PopupDom = {
 	loadingOverlay: document.getElementById("loadingOverlay"),
 	recentButton: document.getElementById("recentButton"),
+	criticalPendingButton: document.getElementById("criticalPendingButton"),
 	settingsButton: document.getElementById("settingsButton"),
 	initialView: document.getElementById("initialView"),
 	tokenSetupView: document.getElementById("tokenSetupView"),
@@ -27,9 +28,11 @@ window.PopupDom = {
 	includeCurrentDayToggle: document.getElementById("includeCurrentDayToggle"),
 	recentList: document.getElementById("recentList"),
 	recentSection: document.getElementById("recentSection"),
+	changesViewTitle: document.getElementById("changesViewTitle"),
 	detailSection: document.getElementById("detailSection"),
 	backArrowButton: document.getElementById("backArrowButton"),
 	detailOpenLinkButton: document.getElementById("detailOpenLinkButton"),
+	criticalAnalysisButton: document.getElementById("criticalAnalysisButton"),
 	detailMeta: document.getElementById("detailMeta"),
 	detailDescription: document.getElementById("detailDescription"),
 };

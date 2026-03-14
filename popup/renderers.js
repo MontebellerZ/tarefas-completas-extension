@@ -129,8 +129,9 @@ function showMetricsSkeleton() {
 	PopupDom.result.classList.remove("hidden");
 }
 
-function renderRecentChangesSkeleton(itemCount = 3) {
+function renderRecentChangesSkeleton(itemCount = 3, { mode = "recent" } = {}) {
 	const total = Math.max(1, Number(itemCount) || 5);
+	const isCriticalMode = mode === "critical";
 	return Array.from({ length: total })
 		.map(
 			() => `
@@ -147,14 +148,19 @@ function renderRecentChangesSkeleton(itemCount = 3) {
 						<span class="skeleton-line skeleton-row-left shimmer"></span>
 						<span class="skeleton-line skeleton-row-right shimmer"></span>
 					</div>
+					${
+						isCriticalMode
+							? '<div class="critical-alert-text-skeleton shimmer"></div>'
+							: ""
+					}
 				</div>
 			`,
 		)
 		.join("");
 }
 
-function showRecentChangesSkeleton(itemCount = 3) {
-	PopupDom.recentList.innerHTML = renderRecentChangesSkeleton(itemCount);
+function showRecentChangesSkeleton(itemCount = 3, options = {}) {
+	PopupDom.recentList.innerHTML = renderRecentChangesSkeleton(itemCount, options);
 }
 
 function showSettingsStatus(text, isError = false) {
@@ -240,7 +246,7 @@ function createTagChip(text) {
 	return chip;
 }
 
-function buildItemCard(item, { clickable = true } = {}) {
+function buildItemCard(item, { clickable = true, criticalAlertText = "" } = {}) {
 	const typeClass = `type-${normalizeType(item.type)}`;
 	const card = document.createElement(clickable ? "button" : "div");
 	if (clickable) card.type = "button";
@@ -296,6 +302,14 @@ function buildItemCard(item, { clickable = true } = {}) {
 		tagRow.className = "item-tags";
 		item.tags.forEach((tag) => tagRow.appendChild(createTagChip(tag)));
 		card.appendChild(tagRow);
+	}
+
+	const normalizedAlert = String(criticalAlertText || "").trim();
+	if (normalizedAlert) {
+		const alertText = document.createElement("div");
+		alertText.className = "critical-alert-text";
+		alertText.textContent = normalizedAlert;
+		card.appendChild(alertText);
 	}
 
 	return card;

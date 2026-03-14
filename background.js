@@ -22,6 +22,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		"listSprints",
 		"openAzureAndCollect",
 		"listRecentChanges",
+		"listCriticalPendingAnalyses",
 	]);
 
 	if (!allowed.has(message?.action)) return;
@@ -72,6 +73,9 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					break;
 				case "listRecentChanges":
 					sendResponse({ ok: true, items: await listRecentChanges() });
+					break;
+				case "listCriticalPendingAnalyses":
+					sendResponse({ ok: true, items: await listCriticalPendingAnalyses() });
 					break;
 			}
 		} catch (error) {

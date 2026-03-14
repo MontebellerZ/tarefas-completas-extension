@@ -38,6 +38,7 @@
         <section id="result" class="result hidden" aria-live="polite"></section>
 
         <button id="recentButton" type="button">Alterações recentes</button>
+        <button id="criticalPendingButton" type="button">Análises críticas pendentes</button>
       </section>
 
       <section id="tokenSetupView" class="view hidden">
@@ -110,7 +111,7 @@
           <button id="backToInitialButton" type="button" class="back-arrow" aria-label="Voltar para tela inicial">
             <span class="back-arrow-icon">➜</span>
           </button>
-          <h2>Alterações desde o último dia útil</h2>
+          <h2 id="changesViewTitle">Alterações desde o último dia útil</h2>
         </div>
 
         <section id="recentSection" class="recent-section">
@@ -130,6 +131,7 @@
             </button>
           </div>
           <div id="detailMeta" class="detail-meta"></div>
+          <button id="criticalAnalysisButton" type="button" class="critical-analysis-button hidden">Fazer análise crítica</button>
           <div id="detailDescription" class="detail-description"></div>
         </section>
       </section>

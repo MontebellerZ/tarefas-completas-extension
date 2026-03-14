@@ -188,6 +188,10 @@ function showDetail(item) {
 	PopupDom.detailDescription.innerHTML = item.description || "<em>Sem descricao.</em>";
 	PopupState.currentDetailItemUrl = item.itemUrl || "";
 	PopupDom.detailOpenLinkButton.classList.toggle("hidden", !PopupState.currentDetailItemUrl);
+	PopupDom.criticalAnalysisButton.classList.toggle(
+		"hidden",
+		PopupState.currentListMode !== "critical" || !PopupState.currentDetailItemUrl,
+	);
 	PopupDom.recentSection.classList.add("hidden");
 	PopupDom.detailSection.classList.remove("hidden");
 
@@ -215,11 +219,16 @@ function showList() {
 	});
 }
 
-function showChangesView() {
+function showChangesView(mode = "recent") {
 	if (!PopupState.availableTokens.length) {
 		showTokenSetupView(false);
 		return;
 	}
+
+	PopupState.currentListMode = mode;
+	PopupDom.changesViewTitle.textContent =
+		mode === "critical" ? "Análises críticas pendentes" : "Alterações desde o último dia útil";
+	PopupDom.criticalAnalysisButton.classList.add("hidden");
 
 	PopupDom.initialView.classList.add("hidden");
 	PopupDom.tokenSetupView.classList.add("hidden");
@@ -260,9 +269,12 @@ function showInitialView() {
 	PopupDom.initialView.classList.remove("hidden");
 }
 
-function renderRecentList(items) {
+function renderRecentList(items, { mode = "recent" } = {}) {
+	const isCriticalMode = mode === "critical";
 	if (!items.length) {
-		PopupDom.recentList.textContent = "Nenhum item alterado encontrado no periodo.";
+		PopupDom.recentList.textContent = isCriticalMode
+			? "Nenhuma análise crítica pendente encontrada nas últimas 3 sprints."
+			: "Nenhum item alterado encontrado no periodo.";
 		PopupDom.detailSection.classList.add("hidden");
 		PopupDom.recentSection.classList.remove("hidden");
 		return;
@@ -270,7 +282,9 @@ function renderRecentList(items) {
 
 	PopupDom.recentList.innerHTML = "";
 	for (const item of items) {
-		const card = PopupRender.buildItemCard(item);
+		const card = PopupRender.buildItemCard(item, {
+			criticalAlertText: isCriticalMode ? item.criticalAlertText : "",
+		});
 		card.addEventListener("click", () => showDetail(item));
 		PopupDom.recentList.appendChild(card);
 	}
@@ -543,10 +557,10 @@ async function runMetricsAction() {
 
 async function loadRecentChanges() {
 	PopupDom.recentButton.disabled = true;
-	showChangesView();
+	showChangesView("recent");
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
-	PopupRender.showRecentChangesSkeleton(3);
+	PopupRender.showRecentChangesSkeleton(3, { mode: "recent" });
 
 	try {
 		const response = await PopupApi.listRecentChanges();
@@ -554,11 +568,32 @@ async function loadRecentChanges() {
 			PopupDom.recentList.textContent = response?.error || "Erro ao buscar itens.";
 			return;
 		}
-		renderRecentList(response.items || []);
+		renderRecentList(response.items || [], { mode: "recent" });
 	} catch (error) {
 		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
 	} finally {
 		PopupDom.recentButton.disabled = false;
+	}
+}
+
+async function loadCriticalPendingAnalyses() {
+	PopupDom.criticalPendingButton.disabled = true;
+	showChangesView("critical");
+	PopupDom.detailSection.classList.add("hidden");
+	PopupDom.recentSection.classList.remove("hidden");
+	PopupRender.showRecentChangesSkeleton(3, { mode: "critical" });
+
+	try {
+		const response = await PopupApi.listCriticalPendingAnalyses();
+		if (!response?.ok) {
+			PopupDom.recentList.textContent = response?.error || "Erro ao buscar análises críticas pendentes.";
+			return;
+		}
+		renderRecentList(response.items || [], { mode: "critical" });
+	} catch (error) {
+		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
+	} finally {
+		PopupDom.criticalPendingButton.disabled = false;
 	}
 }
 
@@ -701,6 +736,10 @@ function bindEvents() {
 		loadRecentChanges();
 	});
 
+	PopupDom.criticalPendingButton.addEventListener("click", () => {
+		loadCriticalPendingAnalyses();
+	});
+
 	PopupDom.settingsButton.addEventListener("click", async () => {
 		if (!PopupState.availableTokens.length) {
 			showTokenSetupView(false);
@@ -726,6 +765,10 @@ function bindEvents() {
 	});
 
 	PopupDom.detailOpenLinkButton.addEventListener("click", () => {
+		openItemInAzure(PopupState.currentDetailItemUrl);
+	});
+
+	PopupDom.criticalAnalysisButton.addEventListener("click", () => {
 		openItemInAzure(PopupState.currentDetailItemUrl);
 	});
 

@@ -524,6 +524,14 @@ button:disabled {
   width: 34%;
 }
 
+.critical-alert-text-skeleton {
+  height: 12px;
+  width: 58%;
+  margin: 2px auto 0;
+  border-radius: 6px;
+  background: #f3d3d6;
+}
+
 .recent-item-header {
   display: flex;
   align-items: center;
@@ -570,6 +578,14 @@ button:disabled {
   font-size: 11px;
   color: #324763;
   gap: 10px;
+}
+
+.critical-alert-text {
+  margin-top: 2px;
+  color: #d13438;
+  font-size: 12px;
+  font-weight: 700;
+  text-align: center;
 }
 
 .item-state {
@@ -666,6 +682,15 @@ button:disabled {
   border-radius: 6px;
   border: 1px solid #e2e8f0;
   padding: 8px;
+}
+
+.critical-analysis-button {
+  margin-top: 8px;
+  align-self: flex-start;
+  background: #f6d4d6;
+  color: #a4262c;
+  border: 1px solid #e9aeb2;
+  font-weight: 700;
 }
 
 .detail-header {
