@@ -34,6 +34,28 @@ function getListEmptyMessageByMode(mode) {
 	return LIST_MODE_EMPTY_MESSAGES[mode] || LIST_MODE_EMPTY_MESSAGES.recent;
 }
 
+function normalizeItemsPerPage(value) {
+	const numeric = Number(value);
+	if (numeric === 20) return 20;
+	if (numeric === 40) return 40;
+	return 10;
+}
+
+function getTotalPagesForCurrentList() {
+	const totalItems = PopupState.currentListItems.length;
+	const perPage = normalizeItemsPerPage(PopupState.itemsPerPage);
+	return Math.max(1, Math.ceil(totalItems / perPage));
+}
+
+function updatePaginationControls() {
+	const totalPages = getTotalPagesForCurrentList();
+	PopupState.currentListPage = Math.min(Math.max(1, PopupState.currentListPage), totalPages);
+	PopupDom.previousPageButton.disabled = PopupState.currentListPage <= 1;
+	PopupDom.nextPageButton.disabled = PopupState.currentListPage >= totalPages;
+	PopupDom.paginationStatus.textContent = `Página ${PopupState.currentListPage} de ${totalPages}`;
+	PopupDom.itemsPerPageSelect.value = String(normalizeItemsPerPage(PopupState.itemsPerPage));
+}
+
 function getCurrentWindowScrollTop() {
 	return Number(
 		window.scrollY ||
@@ -77,6 +99,8 @@ async function saveUiStateSnapshot(overrides = {}) {
 		includeCurrentDay: Boolean(PopupDom.includeCurrentDayToggle?.checked),
 		detailItemId: String(PopupState.currentDetailItemId || "").trim(),
 		detailItemUrl: String(PopupState.currentDetailItemUrl || "").trim(),
+		listCurrentPage: Number(PopupState.currentListPage || 1),
+		listItemsPerPage: Number(normalizeItemsPerPage(PopupState.itemsPerPage)),
 		windowScrollTop: getCurrentWindowScrollTop(),
 		listScrollTop: Number(PopupDom.recentList?.scrollTop || 0),
 		detailDescriptionScrollTop: Number(PopupDom.detailDescription?.scrollTop || 0),
@@ -96,6 +120,9 @@ function applySavedUiStateInputs(savedUiState) {
 	if (typeof savedUiState.includeCurrentDay === "boolean") {
 		PopupDom.includeCurrentDayToggle.checked = savedUiState.includeCurrentDay;
 	}
+	PopupState.itemsPerPage = normalizeItemsPerPage(savedUiState.listItemsPerPage);
+	PopupState.currentListPage = Math.max(1, Number(savedUiState.listCurrentPage || 1));
+	PopupDom.itemsPerPageSelect.value = String(PopupState.itemsPerPage);
 }
 
 function restoreChangesScroll(savedUiState) {
@@ -420,6 +447,7 @@ function showChangesView(mode = "recent") {
 	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.remove("hidden");
+	updatePaginationControls();
 	persistUiStateIfNeeded();
 }
 
@@ -458,18 +486,29 @@ function showInitialView() {
 	persistUiStateIfNeeded();
 }
 
-function renderRecentList(items, { mode = "recent" } = {}) {
-	PopupState.currentListItems = Array.isArray(items) ? items : [];
+function renderCurrentListPage({ mode = "recent" } = {}) {
+	const items = PopupState.currentListItems || [];
+	const perPage = normalizeItemsPerPage(PopupState.itemsPerPage);
+	const totalPages = getTotalPagesForCurrentList();
+	PopupState.currentListPage = Math.min(Math.max(1, PopupState.currentListPage), totalPages);
+
+	PopupDom.recentList.innerHTML = "";
 	const isCriticalMode = mode === "critical";
+
 	if (!items.length) {
 		PopupDom.recentList.textContent = getListEmptyMessageByMode(mode);
 		PopupDom.detailSection.classList.add("hidden");
 		PopupDom.recentSection.classList.remove("hidden");
+		updatePaginationControls();
+		persistUiStateIfNeeded();
 		return;
 	}
 
-	PopupDom.recentList.innerHTML = "";
-	for (const item of items) {
+	const startIndex = (PopupState.currentListPage - 1) * perPage;
+	const endIndex = startIndex + perPage;
+	const pageItems = items.slice(startIndex, endIndex);
+
+	for (const item of pageItems) {
 		const card = PopupRender.buildItemCard(item, {
 			criticalAlertText: isCriticalMode ? item.criticalAlertText : "",
 		});
@@ -479,6 +518,14 @@ function renderRecentList(items, { mode = "recent" } = {}) {
 
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
+	updatePaginationControls();
+	persistUiStateIfNeeded();
+}
+
+function renderRecentList(items, { mode = "recent" } = {}) {
+	PopupState.currentListItems = Array.isArray(items) ? items : [];
+	PopupState.currentListPage = 1;
+	renderCurrentListPage({ mode });
 }
 
 async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
@@ -503,6 +550,14 @@ async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
 		}
 		const items = response.items || [];
 		renderRecentList(items, { mode });
+		if (
+			savedUiState &&
+			(savedUiState.view === "changes" || savedUiState.view === "detail") &&
+			savedUiState.listMode === mode
+		) {
+			PopupState.currentListPage = Math.max(1, Number(savedUiState.listCurrentPage || 1));
+			renderCurrentListPage({ mode });
+		}
 		restoreDetailIfNeeded(savedUiState, items);
 		persistUiStateIfNeeded();
 	} catch (error) {
@@ -810,6 +865,10 @@ async function loadRecentChanges(savedUiState = null) {
 		}
 		const items = response.items || [];
 		renderRecentList(items, { mode: "recent" });
+		if (savedUiState && (savedUiState.view === "changes" || savedUiState.view === "detail") && savedUiState.listMode === "recent") {
+			PopupState.currentListPage = Math.max(1, Number(savedUiState.listCurrentPage || 1));
+			renderCurrentListPage({ mode: "recent" });
+		}
 		restoreDetailIfNeeded(savedUiState, items);
 		persistUiStateIfNeeded();
 	} catch (error) {
@@ -834,6 +893,10 @@ async function loadCriticalPendingAnalyses(savedUiState = null) {
 		}
 		const items = response.items || [];
 		renderRecentList(items, { mode: "critical" });
+		if (savedUiState && (savedUiState.view === "changes" || savedUiState.view === "detail") && savedUiState.listMode === "critical") {
+			PopupState.currentListPage = Math.max(1, Number(savedUiState.listCurrentPage || 1));
+			renderCurrentListPage({ mode: "critical" });
+		}
 		restoreDetailIfNeeded(savedUiState, items);
 		persistUiStateIfNeeded();
 	} catch (error) {
@@ -1019,6 +1082,25 @@ function bindEvents() {
 		{ passive: true },
 	);
 
+	PopupDom.previousPageButton.addEventListener("click", () => {
+		if (PopupState.currentListPage <= 1) return;
+		PopupState.currentListPage -= 1;
+		renderCurrentListPage({ mode: PopupState.currentListMode });
+	});
+
+	PopupDom.nextPageButton.addEventListener("click", () => {
+		const totalPages = getTotalPagesForCurrentList();
+		if (PopupState.currentListPage >= totalPages) return;
+		PopupState.currentListPage += 1;
+		renderCurrentListPage({ mode: PopupState.currentListMode });
+	});
+
+	PopupDom.itemsPerPageSelect.addEventListener("change", () => {
+		PopupState.itemsPerPage = normalizeItemsPerPage(PopupDom.itemsPerPageSelect.value);
+		PopupState.currentListPage = 1;
+		renderCurrentListPage({ mode: PopupState.currentListMode });
+	});
+
 	PopupDom.recentButton.addEventListener("click", () => {
 		loadRecentChanges();
 	});
@@ -1191,6 +1273,7 @@ async function init() {
 	} finally {
 		PopupState.isRestoringUiState = false;
 		persistUiStateIfNeeded();
+		updatePaginationControls();
 		updateTokenFormState();
 		updateSettingsFormState();
 	}

@@ -27,10 +27,10 @@
         <div class="initial-header">
           <h1>Métricas do Usuário Azure</h1>
           <div class="initial-header-actions">
-            <button id="refreshMetricsButton" type="button" class="settings-icon-button refresh-icon-button" aria-label="Atualizar sprints e métricas" title="Atualizar sprints e métricas">
+            <button id="refreshMetricsButton" type="button" class="icon-circle-button refresh-icon-button" aria-label="Atualizar sprints e métricas" title="Atualizar sprints e métricas">
               &#x21bb;
             </button>
-            <button id="settingsButton" type="button" class="settings-icon-button" aria-label="Configurações" title="Configurações">
+            <button id="settingsButton" type="button" class="icon-circle-button" aria-label="Configurações" title="Configurações">
               &#9881;
             </button>
           </div>
@@ -128,6 +128,22 @@
             <span class="back-arrow-icon">➜</span>
           </button>
           <h2 id="changesViewTitle">Alterações desde o último dia útil</h2>
+        </div>
+
+        <div class="list-pagination-controls">
+          <div class="pagination-navigation">
+            <button id="previousPageButton" type="button" class="icon-circle-button pagination-caret-button" aria-label="Página anterior" title="Página anterior">&#x2039;</button>
+            <span id="paginationStatus" class="pagination-status">Página 1 de 1</span>
+            <button id="nextPageButton" type="button" class="icon-circle-button pagination-caret-button" aria-label="Próxima página" title="Próxima página">&#x203A;</button>
+          </div>
+          <div class="pagination-page-size">
+            <label for="itemsPerPageSelect">Itens por página</label>
+            <select id="itemsPerPageSelect">
+              <option value="10">10</option>
+              <option value="20">20</option>
+              <option value="40">40</option>
+            </select>
+          </div>
         </div>
 
         <section id="recentSection" class="recent-section">

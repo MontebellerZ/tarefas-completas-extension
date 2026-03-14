@@ -4,6 +4,8 @@ window.PopupState = {
 	currentDetailItemUrl: "",
 	currentListMode: "recent",
 	currentListItems: [],
+	currentListPage: 1,
+	itemsPerPage: 10,
 	hasCompleteSettings: false,
 	availableTokens: [],
 	availableUsers: [],
