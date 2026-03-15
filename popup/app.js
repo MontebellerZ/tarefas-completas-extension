@@ -990,6 +990,86 @@ function updateSettingsFormState() {
 	PopupDom.saveSettingsButton.disabled = !(tokenId && organization && projectId && teamId);
 }
 
+function normalizeSignatureList(values) {
+	return normalizeStatusValues(values || [])
+		.map((value) => String(value || "").trim().toLowerCase())
+		.filter(Boolean)
+		.sort((left, right) => left.localeCompare(right));
+}
+
+function normalizeSignatureObject(values = {}) {
+	return Object.fromEntries(
+		Object.entries(values || {})
+			.map(([key, value]) => [String(key || "").trim().toLowerCase(), String(value ?? "").trim().toLowerCase()])
+			.filter(([key, value]) => Boolean(key && value))
+			.sort(([left], [right]) => left.localeCompare(right)),
+	);
+}
+
+function normalizeSignatureBooleanObject(values = {}) {
+	return Object.fromEntries(
+		Object.entries(values || {})
+			.map(([key, value]) => [String(key || "").trim().toLowerCase(), Boolean(value)])
+			.filter(([key]) => Boolean(key))
+			.sort(([left], [right]) => left.localeCompare(right)),
+	);
+}
+
+function buildSettingsSavedSignature() {
+	const tokenId = String(PopupDom.tokenSelect.value || "").trim();
+	const organization = String(PopupDom.organizationSelect.value || "").trim();
+	const projectId = String(PopupDom.projectSelect.value || "").trim();
+	const teamId = String(PopupDom.teamSelect.value || "").trim();
+	const userId = String(PopupDom.userSelect.value || "").trim();
+	const buckets = getStatusBucketsFromDraft();
+
+	return JSON.stringify({
+		tokenId,
+		organization,
+		projectId,
+		teamId,
+		userId,
+		buckets: {
+			pending: normalizeSignatureList(buckets.pending),
+			validating: normalizeSignatureList(buckets.validating),
+			finished: normalizeSignatureList(buckets.finished),
+		},
+		stateColors: normalizeSignatureObject(getStatusColorsFromDraft()),
+		statusColorOverrides: normalizeSignatureBooleanObject(getStatusColorOverridesFromDraft()),
+	});
+}
+
+function markSettingsAsSaved() {
+	PopupState.settingsSavedSignature = buildSettingsSavedSignature();
+}
+
+function hasUnsavedSettingsChanges() {
+	if (!PopupDom.settingsView || PopupDom.settingsView.classList.contains("hidden")) {
+		return false;
+	}
+
+	const currentSignature = buildSettingsSavedSignature();
+	const savedSignature = String(PopupState.settingsSavedSignature || "");
+	if (!savedSignature) {
+		return Boolean(currentSignature);
+	}
+
+	return currentSignature !== savedSignature;
+}
+
+async function confirmLeaveSettingsViewIfNeeded() {
+	if (!hasUnsavedSettingsChanges()) {
+		return true;
+	}
+
+	return requestConfirmation({
+		title: "Sair sem salvar",
+		description: "Você possui alterações não salvas em Configurações. Deseja sair mesmo assim?",
+		confirmText: "Sair sem salvar",
+		cancelText: "Continuar editando",
+	});
+}
+
 async function loadSavedSettings() {
 	const response = await PopupApi.getSettings();
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar configuracoes.");
@@ -1411,6 +1491,7 @@ async function initializeSettingsView(savedSettings) {
 	await loadTokenScopedSettings(selectedTokenId);
 
 	updateSettingsFormState();
+	markSettingsAsSaved();
 }
 
 async function runSettingsAction(action, fallbackMessage) {
@@ -1473,9 +1554,13 @@ function bindEvents() {
 	});
 
 	PopupDom.addTokenButton.addEventListener("click", () => {
-		clearTokenForm();
-		showTokenSetupView(PopupState.availableTokens.length > 0);
-		updateTokenFormState();
+		void (async () => {
+			const canLeave = await confirmLeaveSettingsViewIfNeeded();
+			if (!canLeave) return;
+			clearTokenForm();
+			showTokenSetupView(PopupState.availableTokens.length > 0);
+			updateTokenFormState();
+		})();
 	});
 
 	PopupDom.deleteTokenButton.addEventListener("click", async () => {
@@ -1675,6 +1760,9 @@ function bindEvents() {
 	});
 
 	PopupDom.backFromSettingsButton.addEventListener("click", async () => {
+		const canLeave = await confirmLeaveSettingsViewIfNeeded();
+		if (!canLeave) return;
+
 		showInitialView();
 
 		if (!PopupState.shouldReloadMetricsAfterTokenDeletion || !PopupState.hasCompleteSettings) {
@@ -1757,6 +1845,7 @@ function bindEvents() {
 			}
 
 			await saveCurrentProjectStatusMapping();
+			markSettingsAsSaved();
 			PopupDom.statusMappingStatus.classList.remove("hidden");
 			PopupDom.statusMappingStatus.textContent = "Mapeamento de status salvo com sucesso.";
 

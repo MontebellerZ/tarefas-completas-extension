@@ -16,6 +16,7 @@ window.PopupState = {
 	availableUsers: [],
 	confirmationResolver: null,
 	tokenSettingsByTokenId: {},
+	settingsSavedSignature: "",
 	loadingRequests: 0,
 	shouldReloadMetricsAfterTokenDeletion: false,
 	isRestoringUiState: false,
