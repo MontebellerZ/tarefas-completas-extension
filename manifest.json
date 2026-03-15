@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Métricas do Usuário Azure",
   "version": "1.0.1",
-  "description": "Calcula métricas e alterações recentes no Azure DevOps usando PAT e configuração de organização/projeto/time.",
+  "description": "Extensão para Azure DevOps com métricas por sprint, listagens paginadas de itens e análises críticas pendentes, com mapeamento dinâmico de status por projeto usando PAT.",
   "icons": {
     "16": "icon.png",
     "32": "icon.png",
