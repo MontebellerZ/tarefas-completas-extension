@@ -124,11 +124,12 @@ function hasPendingCriticalAnalysisReport(fields = {}) {
 
 function formatHoursDifferenceLabel(value) {
 	const numeric = Number(value);
-	if (!Number.isFinite(numeric) || numeric <= 0) return "0h e 0min";
+	if (!Number.isFinite(numeric) || numeric <= 0) return "0min";
 	const totalMinutes = Math.round(numeric * 60);
 	const hours = Math.floor(totalMinutes / 60);
 	const minutes = totalMinutes % 60;
-	return `${hours}h e ${minutes}min`;
+	if (hours <= 0) return `${minutes}min`;
+	return `${hours}h ${minutes}min`;
 }
 
 function buildCriticalPendingAnalysesWiql(projectName, iterationPaths, targetUser) {

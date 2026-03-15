@@ -770,7 +770,10 @@ function showDetail(item) {
 		0;
 
 	PopupDom.detailMeta.innerHTML = "";
-	const card = PopupRender.buildItemCard(item, { clickable: false });
+	const card = PopupRender.buildItemCard(item, {
+		clickable: false,
+		criticalAlertText: PopupState.currentListMode === "critical" ? item.criticalAlertText : "",
+	});
 	card.classList.add("detail-card");
 	PopupDom.detailMeta.appendChild(card);
 

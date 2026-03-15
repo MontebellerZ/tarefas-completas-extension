@@ -936,7 +936,8 @@ button:disabled {
 
 .critical-analysis-button {
   margin-top: 8px;
-  align-self: flex-start;
+  align-self: stretch;
+  width: 100%;
   background: #f6d4d6;
   color: #a4262c;
   border: 1px solid #e9aeb2;
