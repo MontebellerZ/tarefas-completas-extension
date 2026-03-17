@@ -233,6 +233,40 @@ function getConfiguredStatusSets(settings, profile = VIEW_PROFILES.ANALYST) {
 	};
 }
 
+function normalizeStateValue(value) {
+	return String(value || "").trim().toLowerCase();
+}
+
+function itemMatchesStateSet(item, states) {
+	return states.has(normalizeStateValue(item?.state));
+}
+
+function getMappedTotalStateSet(statusSets) {
+	return new Set([
+		...statusSets.pendingStates,
+		...statusSets.validatingStates,
+		...statusSets.finishedStates,
+	]);
+}
+
+function getItemsForMetricBucket(items, metricBucket, statusSets) {
+	const bucket = String(metricBucket || "").trim().toLowerCase();
+	if (bucket === "started") {
+		const totalStates = getMappedTotalStateSet(statusSets);
+		return items.filter((item) => itemMatchesStateSet(item, totalStates));
+	}
+	if (bucket === "pending") {
+		return items.filter((item) => itemMatchesStateSet(item, statusSets.pendingStates));
+	}
+	if (bucket === "validating") {
+		return items.filter((item) => itemMatchesStateSet(item, statusSets.validatingStates));
+	}
+	if (bucket === "finished") {
+		return items.filter((item) => itemMatchesStateSet(item, statusSets.finishedStates));
+	}
+	throw new Error("Tipo de métrica inválido para listagem de itens.");
+}
+
 function parseAzureDateOnly(value) {
 	const raw = String(value || "").trim();
 	const match = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
@@ -292,26 +326,12 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 	const consideredDays = countElapsedWorkingDays(sprint, forceIncludeCurrentDay);
 	const dailyAverage = consideredDays > 0 ? sumHours / consideredDays : 0;
 
-	const { pendingStates, validatingStates, finishedStates } = getConfiguredStatusSets(dataset.settings, dataset.profile);
-
-	let pendingTasks = 0;
-	let validatingTasks = 0;
-	let finishedTasks = 0;
-
-	for (const item of sprint.workedItems) {
-		const normalizedState = String(item?.state || "").trim().toLowerCase();
-		if (pendingStates.has(normalizedState)) {
-			pendingTasks += 1;
-			continue;
-		}
-		if (validatingStates.has(normalizedState)) {
-			validatingTasks += 1;
-			continue;
-		}
-		if (finishedStates.has(normalizedState)) {
-			finishedTasks += 1;
-		}
-	}
+	const statusSets = getConfiguredStatusSets(dataset.settings, dataset.profile);
+	const pendingTasks = getItemsForMetricBucket(sprint.workedItems, "pending", statusSets).length;
+	const validatingTasks = getItemsForMetricBucket(sprint.workedItems, "validating", statusSets).length;
+	const finishedTasks = getItemsForMetricBucket(sprint.workedItems, "finished", statusSets).length;
+	const startedTasks = getItemsForMetricBucket(sprint.workedItems, "started", statusSets).length;
+	const { validatingStates } = statusSets;
 
 	if (dataset.profile === VIEW_PROFILES.TESTS) {
 		const releasedByDay = new Map();
@@ -375,7 +395,7 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 		);
 
 		const releaseTasks = validatingTasks;
-		const totalTasks = pendingTasks + releaseTasks;
+		const totalTasks = startedTasks;
 		const releasedPerDay = [...releasedByDay.entries()]
 			.sort(([left], [right]) => left.localeCompare(right))
 			.map(([dateKey, info]) => ({
@@ -385,7 +405,7 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 				nonBusinessDay: Boolean(info?.nonBusinessDay),
 			}));
 		return {
-			startedTasks: totalTasks,
+			startedTasks,
 			pendingTasks,
 			validatingTasks: releaseTasks,
 			finishedTasks,
@@ -434,7 +454,7 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 			: [];
 
 	return {
-		startedTasks: sprint.workedItems.length,
+		startedTasks,
 		pendingTasks,
 		validatingTasks,
 		finishedTasks,
@@ -457,21 +477,8 @@ async function listSprintItemsByMetricBucket(sprintId, metricBucket, options = {
 		throw new Error("Sprint selecionada nao encontrada.");
 	}
 
-	const bucket = String(metricBucket || "").trim().toLowerCase();
-	const { pendingStates, validatingStates, finishedStates } = getConfiguredStatusSets(dataset.settings, dataset.profile);
-
-	let filtered = [];
-	if (bucket === "started") {
-		filtered = [...sprint.workedItems];
-	} else if (bucket === "pending") {
-		filtered = sprint.workedItems.filter((item) => pendingStates.has(String(item?.state || "").trim().toLowerCase()));
-	} else if (bucket === "validating") {
-		filtered = sprint.workedItems.filter((item) => validatingStates.has(String(item?.state || "").trim().toLowerCase()));
-	} else if (bucket === "finished") {
-		filtered = sprint.workedItems.filter((item) => finishedStates.has(String(item?.state || "").trim().toLowerCase()));
-	} else {
-		throw new Error("Tipo de métrica inválido para listagem de itens.");
-	}
+	const statusSets = getConfiguredStatusSets(dataset.settings, dataset.profile);
+	const filtered = getItemsForMetricBucket(sprint.workedItems, metricBucket, statusSets);
 
 	const sorted = filtered.sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0));
 	if (dataset.profile !== VIEW_PROFILES.TESTS) {
