@@ -17,6 +17,14 @@ function formatHoursAndMinutes(value) {
 	return `${hours}h ${String(minutes).padStart(2, "0")}min`;
 }
 
+function escapeHtmlAttribute(value) {
+	return String(value || "")
+		.replace(/&/g, "&amp;")
+		.replace(/"/g, "&quot;")
+		.replace(/</g, "&lt;")
+		.replace(/>/g, "&gt;");
+}
+
 function getAverageFeedback(dailyAverage) {
 	const avg = Number(dailyAverage);
 	if (avg >= 8) {
@@ -75,13 +83,12 @@ function renderMetricsSkeleton() {
 	return `
 		<div class="metrics-wrap metrics-wrap-skeleton">
 			<div class="metrics-sprint-title-skeleton shimmer"></div>
-			<div class="metrics-grid metrics-grid-primary">
+			<div class="metrics-unified-grid">
 				${createSkeletonTile()}
 				${createSkeletonTile()}
 				${createSkeletonTile()}
 				${createSkeletonTile()}
-			</div>
-			<div class="metrics-grid metrics-grid-secondary">
+				${createSkeletonTile()}
 				${createSkeletonTile()}
 				${createSkeletonTile()}
 				${createSkeletonTile()}
@@ -93,14 +100,31 @@ function renderMetricsSkeleton() {
 
 function renderMetrics(metrics) {
 	const profile = String(metrics?.profile || PopupState?.activeProfile || "analyst").trim().toLowerCase();
+	const hasCapacity = Boolean(metrics?.hasCapacity !== false);
+	const sprintLabel = String(metrics.selectedSprintLabel || "-");
+	const startedTasks = Number.isFinite(Number(metrics.startedTasks)) ? Number(metrics.startedTasks) : 0;
+	const pendingTasks = Number.isFinite(Number(metrics.pendingTasks)) ? Number(metrics.pendingTasks) : 0;
+	const validatingTasks = Number.isFinite(Number(metrics.validatingTasks)) ? Number(metrics.validatingTasks) : 0;
+	const finishedTasks = Number.isFinite(Number(metrics.finishedTasks)) ? Number(metrics.finishedTasks) : 0;
+	const consideredDays = Number.isFinite(Number(metrics.completedDays)) ? Number(metrics.completedDays) : 0;
+	const hoursLabel = formatHoursAndMinutes(metrics.sumHours);
+	const averageLabel = hasCapacity ? formatHoursAndMinutes(metrics.dailyAverage) : "Sem capacity";
+	const averageValueClass = hasCapacity
+		? "metric-value-gray-secondary metric-value-medium"
+		: "metric-value-gray-secondary metric-value-medium metric-value-small-text";
+	const feedback = getAverageFeedback(metrics.dailyAverage);
+	const shouldHideFeedbackForAllAnalysts =
+		profile === "management" && !String(PopupState?.managementSelectedUserId || "").trim();
+	const shouldHideFeedbackForNoCapacity = !hasCapacity;
+	const shouldUseManagementAllAnalystsLayout =
+		profile === "management" && !String(PopupState?.managementSelectedUserId || "").trim();
+
 	if (profile === "tests") {
-		const sprintLabel = String(metrics.selectedSprintLabel || "-");
 		const pendingTasks = Number.isFinite(Number(metrics.pendingTasks)) ? Number(metrics.pendingTasks) : 0;
 		const releaseTasks = Number.isFinite(Number(metrics.validatingTasks)) ? Number(metrics.validatingTasks) : 0;
 		const totalTasks = Number.isFinite(Number(metrics.totalTasks))
 			? Number(metrics.totalTasks)
 			: pendingTasks + releaseTasks;
-		const consideredDays = Number(metrics.completedDays) || 0;
 		const releasedPerDay = Array.isArray(metrics.releasedPerDay)
 			? metrics.releasedPerDay
 			: Array.isArray(metrics.finishedPerDay)
@@ -140,48 +164,34 @@ function renderMetrics(metrics) {
 		return `
 			<div class="metrics-wrap">
 				<div class="metrics-sprint-title">Testes - ${sprintLabel}</div>
-				<div class="metrics-grid metrics-grid-primary metrics-grid-tests-primary">
+				<div class="metrics-unified-grid metrics-unified-grid-tests">
 					${createMetricTile("Total", String(totalTasks), "metric-value-lilac", "started")}
 					${createMetricTile("Pendentes", String(pendingTasks), "metric-value-yellow", "pending")}
 					${createMetricTile("Liberados", String(releaseTasks), "metric-value-green", "validating")}
 					${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}
-				</div>
-				<div class="tests-chart-wrap">
-					<div class="tests-chart-title-row">
-						<div class="tests-chart-title">Testes liberados por dia</div>
-						<div class="tests-chart-total">Total: ${releasedTotal}</div>
+					<div class="tests-chart-wrap metrics-unified-span-4 metrics-tests-chart-span-two-rows">
+						<div class="tests-chart-title-row">
+							<div class="tests-chart-title">Testes liberados por dia</div>
+							<div class="tests-chart-total">Total: ${releasedTotal}</div>
+						</div>
+						<div class="tests-chart-grid">${chartMarkup}</div>
 					</div>
-					<div class="tests-chart-grid">${chartMarkup}</div>
 				</div>
 			</div>
 		`;
 	}
 
-	const feedback = getAverageFeedback(metrics.dailyAverage);
-	const shouldHideFeedbackForAllAnalysts =
-		String(profile || PopupState?.activeProfile || "").trim().toLowerCase() === "management" &&
-		!String(PopupState?.managementSelectedUserId || "").trim();
-	const sprintLabel = String(metrics.selectedSprintLabel || "-");
-	const startedTasks = Number.isFinite(Number(metrics.startedTasks)) ? Number(metrics.startedTasks) : 0;
-	const pendingTasks = Number.isFinite(Number(metrics.pendingTasks)) ? Number(metrics.pendingTasks) : 0;
-	const validatingTasks = Number.isFinite(Number(metrics.validatingTasks)) ? Number(metrics.validatingTasks) : 0;
-	const finishedTasks = Number.isFinite(Number(metrics.finishedTasks)) ? Number(metrics.finishedTasks) : 0;
-	const consideredDays = Number.isFinite(Number(metrics.completedDays)) ? Number(metrics.completedDays) : 0;
-	const hoursLabel = formatHoursAndMinutes(metrics.sumHours);
-	const averageLabel = formatHoursAndMinutes(metrics.dailyAverage);
-	const shouldUseManagementAllAnalystsLayout =
-		profile === "management" && !String(PopupState?.managementSelectedUserId || "").trim();
 	const roundedHours = Math.round(Number(metrics.sumHours) || 0);
 	const analystHours = Array.isArray(metrics.analystHours)
 		? metrics.analystHours
 				.map((entry) => {
-					const name = shortenUserNameToTwoParts(entry?.name || "") || "Nao atribuido";
+					const fullName = sanitizeDisplayedUserName(entry?.name || "") || "Nao atribuido";
+					const name = shortenUserNameToTwoParts(fullName) || "Nao atribuido";
 					const totalHours = Number(entry?.totalHours || 0);
-					const dailyAverageHours = Number(entry?.dailyAverage || 0);
 					return {
+						fullName,
 						name,
 						totalHours: Number.isFinite(totalHours) && totalHours > 0 ? totalHours : 0,
-						dailyAverageHours: Number.isFinite(dailyAverageHours) && dailyAverageHours > 0 ? dailyAverageHours : 0,
 					};
 				})
 				.sort((left, right) => Number(right.totalHours || 0) - Number(left.totalHours || 0))
@@ -193,11 +203,12 @@ function renderMetrics(metrics) {
 				.map((entry, index) => {
 					const widthPercent = Math.max(0, Math.min(100, Math.round((Number(entry.totalHours || 0) / maxAnalystHours) * 100)));
 					const color = strongPalette[index % strongPalette.length];
+					const analystFullName = escapeHtmlAttribute(entry.fullName || entry.name || "");
 					return `
-						<div class="management-hours-row">
+						<div class="management-hours-row management-hours-row-clickable" data-analyst-full-name="${analystFullName}" title="Filtrar por ${analystFullName}">
 							<div class="management-hours-row-header">
 								<span class="management-hours-analyst-name">${entry.name}</span>
-								<span class="management-hours-analyst-average">${formatHoursAndMinutes(entry.dailyAverageHours)}</span>
+								<span class="management-hours-analyst-average">${formatHoursAndMinutes(entry.totalHours)}</span>
 							</div>
 							<div class="management-hours-bar-track">
 								<div class="management-hours-bar-fill" style="width:${widthPercent}%; background:${color};"></div>
@@ -244,19 +255,19 @@ function renderMetrics(metrics) {
 	return `
 		<div class="metrics-wrap">
 			<div class="metrics-sprint-title">Tarefas - ${sprintLabel}</div>
-			<div class="metrics-grid metrics-grid-primary">
+			<div class="metrics-unified-grid">
 				${createMetricTile("Iniciadas", String(startedTasks), "metric-value-lilac", "started")}
 				${createMetricTile("Andamento", String(pendingTasks), "metric-value-blue", "pending")}
 				${createMetricTile("Validando", String(validatingTasks), "metric-value-yellow", "validating")}
 				${createMetricTile("Finalizadas", String(finishedTasks), "metric-value-green", "finished")}
-			</div>
-			<div class="metrics-grid metrics-grid-secondary">
 				${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}
-				${createMetricTile("Horas", hoursLabel, "metric-value-gray-secondary metric-value-medium")}
-				${createMetricTile("Média", averageLabel, "metric-value-gray-secondary metric-value-medium")}
+				<div class="metrics-secondary-split-wrap">
+					${createMetricTile("Horas", hoursLabel, "metric-value-gray-secondary metric-value-medium")}
+					${createMetricTile("Média", averageLabel, averageValueClass)}
+				</div>
 			</div>
 			${
-				shouldHideFeedbackForAllAnalysts
+				shouldHideFeedbackForAllAnalysts || shouldHideFeedbackForNoCapacity
 					? ""
 					: `
 						<div class="metrics-feedback ${feedback.variantClass}">

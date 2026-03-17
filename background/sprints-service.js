@@ -164,7 +164,7 @@ async function loadSprintDataset(options = {}) {
 
 	const userIterations = targetUser?.isAllUsers
 		? withCapacity
-		: withCapacity.filter(({ cap }) => cap.some((entry) => matchesIdentity(entry.teamMember, targetUser)));
+		: withCapacity;
 
 	if (!userIterations.length) {
 		return { settings, currentUser, sprints: [] };
@@ -172,19 +172,21 @@ async function loadSprintDataset(options = {}) {
 
 	const sprintData = await Promise.all(
 		userIterations.map(async ({ iter, cap }) => {
-			const currentCapacity = targetUser?.isAllUsers ? { daysOff: [] } : cap.find((entry) => matchesIdentity(entry.teamMember, targetUser));
+			const currentCapacity = targetUser?.isAllUsers ? { daysOff: [] } : cap.find((entry) => matchesIdentity(entry.teamMember, targetUser)) || null;
+			const hasCapacity = targetUser?.isAllUsers ? true : Boolean(currentCapacity);
 			const [teamDaysOff, items] = await Promise.all([
 				getCachedTeamDaysOff(settings, iter),
 				getCachedSprintItems(settings, iter, targetUser),
 			]);
-			return { iter, currentCapacity, teamDaysOff, items };
+			return { iter, currentCapacity, hasCapacity, teamDaysOff, items };
 		}),
 	);
 
 	const sprintResults = [];
-	for (const { iter, currentCapacity, teamDaysOff, items } of sprintData) {
+	for (const { iter, currentCapacity, hasCapacity, teamDaysOff, items } of sprintData) {
 		if (!items.length) continue;
 		const attributes = iter.attributes || {};
+		const shouldUseWorkingDays = targetUser?.isAllUsers || hasCapacity;
 		sprintResults.push({
 			id: iter.id,
 			name: iter.name,
@@ -192,7 +194,10 @@ async function loadSprintDataset(options = {}) {
 			label: formatIterationPath(iter.path || iter.name, settings.projectName),
 			startDate: attributes.startDate,
 			finishDate: attributes.finishDate,
-			workingDateKeys: computeWorkingDateKeys(attributes, teamSettings, teamDaysOff, currentCapacity.daysOff),
+			workingDateKeys: shouldUseWorkingDays
+				? computeWorkingDateKeys(attributes, teamSettings, teamDaysOff, currentCapacity?.daysOff || [])
+				: [],
+			hasCapacity,
 			workedItems: items,
 		});
 	}
@@ -388,6 +393,7 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 			sumHours: Number(sumHours.toFixed(4)),
 			completedDays: consideredDays,
 			dailyAverage: Number((releaseTasks / Math.max(1, consideredDays)).toFixed(4)),
+			hasCapacity: Boolean(sprint.hasCapacity !== false),
 			releasedPerDay,
 			finishedPerDay: releasedPerDay,
 			selectedSprint: sprint.id,
@@ -435,6 +441,7 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 		sumHours: Number(sumHours.toFixed(4)),
 		completedDays: consideredDays,
 		dailyAverage: Number(dailyAverage.toFixed(4)),
+		hasCapacity: Boolean(sprint.hasCapacity !== false),
 		analystHours,
 		selectedSprint: sprint.id,
 		selectedSprintLabel: sprint.label,
