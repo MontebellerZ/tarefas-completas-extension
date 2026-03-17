@@ -33,19 +33,31 @@ function matchesIdentity(left, right) {
 	return false;
 }
 
-function resolveTargetUser(settings, currentUser) {
-	if (!settings.selectedUserId && !settings.selectedUserUniqueName && !settings.selectedUserName && !settings.selectedUserDescriptor) {
-		return { ...currentUser, isMe: true };
+function resolveTargetUser(settings, currentUser, options = {}) {
+	const scope = String(options.scope || QUERY_SCOPES.ME).trim().toLowerCase();
+	if (scope === QUERY_SCOPES.ALL_USERS) {
+		return { isAllUsers: true, isMe: false };
 	}
 
-	return {
-		id: settings.selectedUserId,
-		descriptor: settings.selectedUserDescriptor,
-		uniqueName: settings.selectedUserUniqueName,
-		displayName: settings.selectedUserName,
-		name: settings.selectedUserName,
-		isMe: false,
-	};
+	const selectedUser = options.selectedUser && typeof options.selectedUser === "object" ? options.selectedUser : {};
+	const selectedUserId = String(selectedUser.id || "").trim();
+	const selectedUserDescriptor = String(selectedUser.descriptor || "").trim();
+	const selectedUserUniqueName = String(selectedUser.uniqueName || "").trim();
+	const selectedUserName = String(selectedUser.name || selectedUser.displayName || "").trim();
+
+	if (scope === QUERY_SCOPES.SPECIFIC_USER && (selectedUserId || selectedUserDescriptor || selectedUserUniqueName || selectedUserName)) {
+		return {
+			id: selectedUserId,
+			descriptor: selectedUserDescriptor,
+			uniqueName: selectedUserUniqueName,
+			displayName: selectedUserName,
+			name: selectedUserName,
+			isMe: false,
+			isAllUsers: false,
+		};
+	}
+
+	return { ...currentUser, isMe: true, isAllUsers: false };
 }
 
 function getTargetUserCacheKey(targetUser) {

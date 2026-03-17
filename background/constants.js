@@ -5,6 +5,24 @@ const API_VERSION = "7.1";
 const CAPACITY_API_VERSION = "6.0";
 const WEEKDAY_NAMES = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"];
 
+const VIEW_PROFILES = {
+	ANALYST: "analyst",
+	TESTS: "tests",
+	MANAGEMENT: "management",
+};
+
+const QUERY_SCOPES = {
+	ME: "me",
+	SPECIFIC_USER: "specific-user",
+	ALL_USERS: "all-users",
+};
+
+const STATUS_MAPPING_BUCKETS_BY_PROFILE = {
+	[VIEW_PROFILES.ANALYST]: ["pending", "validating", "finished"],
+	[VIEW_PROFILES.MANAGEMENT]: ["pending", "validating", "finished"],
+	[VIEW_PROFILES.TESTS]: ["pending", "validating", "finished"],
+};
+
 const TTL = {
 	user: 30 * 60 * 1000,
 	teamSettings: 15 * 60 * 1000,
@@ -32,6 +50,7 @@ const DEFAULT_SETTINGS = {
 	selectedUserName: "",
 	selectedUserUniqueName: "",
 	selectedUserDescriptor: "",
+	selectedProfile: VIEW_PROFILES.ANALYST,
 };
 
 const cache = {

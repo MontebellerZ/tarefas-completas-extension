@@ -27,6 +27,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 		"listSprintItemsByMetricBucket",
 		"listRecentChanges",
 		"listCriticalPendingAnalyses",
+		"requireCriticalAnalysis",
 	]);
 
 	if (!allowed.has(message?.action)) return;
@@ -67,13 +68,14 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					sendResponse({ ok: true, ...(await listUsers(message.organization, message.projectId, message.teamId, message.tokenValue)) });
 					break;
 				case "listSprints":
-					sendResponse({ ok: true, ...(await listSprints()) });
+					sendResponse({ ok: true, ...(await listSprints({ profile: message.profile })) });
 					break;
 				case "listProjectWorkItemStates": {
 					const settings = await getSettings();
 					const organization = normalizeOrganization(message.organization || settings.organization);
 					const projectId = String(message.projectId || settings.projectId || "").trim();
 					const projectName = String(message.projectName || settings.projectName || "").trim();
+					const profile = String(message.profile || settings.selectedProfile || VIEW_PROFILES.ANALYST).trim().toLowerCase();
 					const discovery = await listProjectWorkItemStates(organization, projectName, message.tokenValue || settings.tokenValue);
 
 					let statusMapping = null;
@@ -81,6 +83,7 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 						statusMapping = await saveProjectStatusDiscovery({
 							organization,
 							projectId,
+							profile,
 							workItemTypes: discovery.workItemTypes,
 							availableStates: discovery.availableStates,
 						});
@@ -93,17 +96,20 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 					const settings = await getSettings();
 					const organization = normalizeOrganization(message.organization || settings.organization);
 					const projectId = String(message.projectId || settings.projectId || "").trim();
-					sendResponse({ ok: true, mapping: await getProjectStatusMapping(organization, projectId) });
+					const profile = String(message.profile || settings.selectedProfile || VIEW_PROFILES.ANALYST).trim().toLowerCase();
+					sendResponse({ ok: true, mapping: await getProjectStatusMapping(organization, projectId, profile) });
 					break;
 				}
 				case "saveProjectStatusMapping": {
 					const settings = await getSettings();
 					const organization = normalizeOrganization(message.organization || settings.organization);
 					const projectId = String(message.projectId || settings.projectId || "").trim();
+					const profile = String(message.profile || settings.selectedProfile || VIEW_PROFILES.ANALYST).trim().toLowerCase();
 					const mapping = await saveProjectStatusMapping({
 						...(message.mapping || {}),
 						organization,
 						projectId,
+						profile,
 					});
 					sendResponse({ ok: true, mapping });
 					break;
@@ -111,20 +117,48 @@ chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
 				case "openAzureAndCollect":
 					sendResponse({
 						ok: true,
-						metrics: await collectMetrics(message.sprintId, Boolean(message.includeCurrentDay)),
+						metrics: await collectMetrics(message.sprintId, Boolean(message.includeCurrentDay), {
+							profile: message.profile,
+							scope: message.scope,
+							selectedUser: message.selectedUser,
+						}),
 					});
 					break;
 				case "listSprintItemsByMetricBucket":
 					sendResponse({
 						ok: true,
-						items: await listSprintItemsByMetricBucket(message.sprintId, message.metricBucket),
+						items: await listSprintItemsByMetricBucket(message.sprintId, message.metricBucket, {
+							profile: message.profile,
+							scope: message.scope,
+							selectedUser: message.selectedUser,
+						}),
 					});
 					break;
 				case "listRecentChanges":
-					sendResponse({ ok: true, items: await listRecentChanges() });
+					sendResponse({
+						ok: true,
+						items: await listRecentChanges({
+							profile: message.profile,
+							scope: message.scope,
+							selectedUser: message.selectedUser,
+						}),
+					});
 					break;
 				case "listCriticalPendingAnalyses":
-					sendResponse({ ok: true, items: await listCriticalPendingAnalyses() });
+					sendResponse({
+						ok: true,
+						items: await listCriticalPendingAnalyses({
+							profile: message.profile,
+							scope: message.scope,
+							selectedUser: message.selectedUser,
+						}),
+					});
+					break;
+				case "requireCriticalAnalysis":
+					sendResponse({
+						ok: true,
+						...(await requireCriticalAnalysisComment(message.workItemId, message.responsibleIdentity)),
+					});
 					break;
 			}
 		} catch (error) {

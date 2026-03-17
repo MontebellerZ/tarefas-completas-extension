@@ -25,10 +25,6 @@ function clearScopedSelections(settings) {
 		projectName: "",
 		teamId: "",
 		teamName: "",
-		selectedUserId: "",
-		selectedUserName: "",
-		selectedUserUniqueName: "",
-		selectedUserDescriptor: "",
 	};
 }
 
@@ -38,13 +34,16 @@ const TOKEN_SCOPED_FIELDS = [
 	"projectName",
 	"teamId",
 	"teamName",
-	"selectedUserId",
-	"selectedUserName",
-	"selectedUserUniqueName",
-	"selectedUserDescriptor",
 ];
 
 const STATUS_MAPPING_BUCKETS = ["pending", "validating", "finished"];
+
+function normalizeViewProfile(value) {
+	const normalized = String(value || "").trim().toLowerCase();
+	if (normalized === VIEW_PROFILES.TESTS) return VIEW_PROFILES.TESTS;
+	if (normalized === VIEW_PROFILES.MANAGEMENT) return VIEW_PROFILES.MANAGEMENT;
+	return VIEW_PROFILES.ANALYST;
+}
 
 function getEmptyTokenScopedSettings() {
 	return {
@@ -53,10 +52,6 @@ function getEmptyTokenScopedSettings() {
 		projectName: "",
 		teamId: "",
 		teamName: "",
-		selectedUserId: "",
-		selectedUserName: "",
-		selectedUserUniqueName: "",
-		selectedUserDescriptor: "",
 	};
 }
 
@@ -212,6 +207,12 @@ function buildProjectStatusKey(organization, projectId) {
 	return `${org.toLowerCase()}|${project.toLowerCase()}`;
 }
 
+function buildProfileProjectStatusKey(organization, projectId, profile) {
+	const baseKey = buildProjectStatusKey(organization, projectId);
+	if (!baseKey) return "";
+	return `${baseKey}|${normalizeViewProfile(profile)}`;
+}
+
 function normalizeStoredSettings(rawSettings = {}) {
 	const base = { ...DEFAULT_SETTINGS, ...(rawSettings || {}) };
 	let tokens = sanitizeTokens(base.tokens);
@@ -238,6 +239,7 @@ function normalizeStoredSettings(rawSettings = {}) {
 		selectedTokenId: selectedToken?.id || "",
 		tokenName: selectedToken?.name || "",
 		tokenValue: selectedToken?.value || "",
+		selectedProfile: normalizeViewProfile(base.selectedProfile),
 		tokenConfigurations,
 		statusMappingsByProject,
 	}, selectedScoped);
@@ -271,9 +273,11 @@ async function getSettings() {
 async function saveSettings(settings) {
 	const current = normalizeStoredSettings(await getStoredSettingsValue());
 	const selectedTokenId = String(settings?.selectedTokenId ?? current.selectedTokenId ?? "").trim();
+	const selectedProfile = normalizeViewProfile(settings?.selectedProfile || current.selectedProfile);
 	const merged = applyScopedToSettings({
 		...current,
 		...settings,
+		selectedProfile,
 		tokens: current.tokens,
 		selectedTokenId,
 		tokenConfigurations: {
@@ -372,10 +376,18 @@ function ensureRequiredSettings(settings) {
 }
 
 function contextCacheKey(settings) {
-	return `${settings.selectedTokenId || "no-token"}|${settings.organization}|${settings.projectId}|${settings.teamId}|${settings.selectedUserId || settings.selectedUserUniqueName || "me"}`;
+	return `${settings.selectedTokenId || "no-token"}|${settings.organization}|${settings.projectId}|${settings.teamId}`;
 }
 
-function getProjectStatusMappingEntry(settings, organization, projectId) {
+function getProjectStatusMappingEntry(settings, organization, projectId, profile = VIEW_PROFILES.ANALYST) {
+	const profileProjectKey = buildProfileProjectStatusKey(organization, projectId, profile);
+	if (profileProjectKey) {
+		const scopedEntry = settings?.statusMappingsByProject?.[profileProjectKey];
+		if (scopedEntry) {
+			return normalizeProjectStatusMappingEntry(scopedEntry);
+		}
+	}
+
 	const projectKey = buildProjectStatusKey(organization, projectId);
 	if (!projectKey) {
 		return normalizeProjectStatusMappingEntry({ configured: false, buckets: {} });
@@ -385,16 +397,17 @@ function getProjectStatusMappingEntry(settings, organization, projectId) {
 	return normalizeProjectStatusMappingEntry(entry);
 }
 
-async function getProjectStatusMapping(organization, projectId) {
+async function getProjectStatusMapping(organization, projectId, profile = VIEW_PROFILES.ANALYST) {
 	const settings = await getSettings();
-	return getProjectStatusMappingEntry(settings, organization, projectId);
+	return getProjectStatusMappingEntry(settings, organization, projectId, profile);
 }
 
 async function saveProjectStatusMapping(payload = {}) {
 	const current = normalizeStoredSettings(await getStoredSettingsValue());
 	const organization = normalizeOrganization(payload.organization || current.organization);
 	const projectId = String(payload.projectId || current.projectId || "").trim();
-	const projectKey = buildProjectStatusKey(organization, projectId);
+	const profile = normalizeViewProfile(payload.profile || current.selectedProfile);
+	const projectKey = buildProfileProjectStatusKey(organization, projectId, profile);
 	if (!projectKey) {
 		throw new Error("Informe organização e projeto para salvar o mapeamento de status.");
 	}
@@ -422,7 +435,8 @@ async function saveProjectStatusDiscovery(payload = {}) {
 	const current = normalizeStoredSettings(await getStoredSettingsValue());
 	const organization = normalizeOrganization(payload.organization || current.organization);
 	const projectId = String(payload.projectId || current.projectId || "").trim();
-	const projectKey = buildProjectStatusKey(organization, projectId);
+	const profile = normalizeViewProfile(payload.profile || current.selectedProfile);
+	const projectKey = buildProfileProjectStatusKey(organization, projectId, profile);
 	if (!projectKey) {
 		throw new Error("Informe organização e projeto para salvar os estados descobertos.");
 	}

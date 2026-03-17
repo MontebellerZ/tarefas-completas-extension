@@ -299,13 +299,14 @@ async function listUsers(organization, projectId, teamId, tokenValue) {
 		const descriptor = String(identity?.descriptor || "").trim();
 		const uniqueName = String(identity?.uniqueName || identity?.mailAddress || identity?.emailAddress || "").trim();
 		const displayName = String(identity?.displayName || identity?.name || identity?.providerDisplayName || uniqueName || "").trim();
+		const normalizedDisplayName = displayName.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim() || displayName;
 		const key = id || descriptor || uniqueName || displayName;
 		if (!key || byKey.has(key)) continue;
 		byKey.set(key, {
 			value: id || descriptor || uniqueName,
-			label: uniqueName && uniqueName !== displayName ? `${displayName} (${uniqueName})` : displayName,
+			label: normalizedDisplayName,
 			id,
-			name: displayName,
+			name: normalizedDisplayName,
 			uniqueName,
 			descriptor,
 		});
@@ -399,6 +400,10 @@ async function runWiql(settings, wiqlQuery) {
 }
 
 function buildAssignedToCondition(targetUser) {
+	if (targetUser?.isAllUsers) {
+		return "";
+	}
+
 	if (!targetUser || targetUser.isMe) {
 		return `[System.AssignedTo] = @Me`;
 	}
@@ -414,10 +419,12 @@ function buildAssignedToCondition(targetUser) {
 function buildSprintItemsWiql(projectName, iterationPath, targetUser) {
 	const p = projectName.replace(/'/g, "''");
 	const ip = iterationPath.replace(/'/g, "''");
+	const assignedToCondition = buildAssignedToCondition(targetUser);
+	const assignedToClause = assignedToCondition ? ` AND ${assignedToCondition}` : "";
 	return (
 		`SELECT [System.Id] FROM WorkItems` +
 		` WHERE [System.TeamProject] = '${p}'` +
-		` AND ${buildAssignedToCondition(targetUser)}` +
+		assignedToClause +
 		` AND [System.WorkItemType] IN ('Task', 'Bug')` +
 		` AND [System.IterationPath] = '${ip}'` +
 		` AND [Microsoft.VSTS.Scheduling.CompletedWork] > 0` +
@@ -427,13 +434,56 @@ function buildSprintItemsWiql(projectName, iterationPath, targetUser) {
 
 function buildRecentChangesWiql(projectName, sinceDateKey, targetUser) {
 	const p = projectName.replace(/'/g, "''");
+	const assignedToCondition = buildAssignedToCondition(targetUser);
+	const assignedToClause = assignedToCondition ? ` AND ${assignedToCondition}` : "";
 	return (
 		`SELECT [System.Id] FROM WorkItems` +
 		` WHERE [System.TeamProject] = '${p}'` +
-		` AND ${buildAssignedToCondition(targetUser)}` +
+		assignedToClause +
 		` AND [System.WorkItemType] IN ('Task', 'Bug')` +
 		` AND [Microsoft.VSTS.Scheduling.CompletedWork] > 0` +
 		` AND [System.ChangedDate] >= '${sinceDateKey}'` +
 		` ORDER BY [System.ChangedDate] DESC`
 	);
+}
+
+async function requireCriticalAnalysisComment(workItemId, responsibleIdentity) {
+	const settings = await getSettings();
+	ensureRequiredSettings(settings);
+
+	const itemId = Number(workItemId);
+	if (!Number.isInteger(itemId) || itemId <= 0) {
+		throw new Error("ID do item inválido para solicitar análise crítica.");
+	}
+
+	const responsible = responsibleIdentity && typeof responsibleIdentity === "object" ? responsibleIdentity : {};
+	const descriptor = String(responsible.descriptor || "").trim();
+	const displayName = String(responsible.displayName || responsible.name || responsible.uniqueName || "").trim();
+	if (!descriptor || !displayName) {
+		throw new Error("Não foi possível identificar o responsável para menção rica no comentário.");
+	}
+
+	const mentionHtml = `<a href=\"#\" data-vss-mention=\"version:2.0,${descriptor}\">@${displayName}</a>`;
+	const commentText = `${mentionHtml} lembrete para realizar a análise crítica deste item.`;
+
+	await azureFetchJson(
+		`https://dev.azure.com/${encodePathPart(settings.organization)}/${encodePathPart(settings.projectName)}/_apis/wit/workItems/${encodePathPart(itemId)}/comments?api-version=7.1-preview.4`,
+		{
+			tokenValue: settings.tokenValue,
+			method: "POST",
+			headers: { "Content-Type": "application/json" },
+			body: JSON.stringify({
+				text: commentText,
+				renderedText: commentText,
+				mentions: [
+					{
+						descriptor,
+						displayName,
+					},
+				],
+			}),
+		},
+	);
+
+	return { commented: true };
 }

@@ -36,14 +36,32 @@
           </div>
         </div>
 
-        <div class="controls-row">
+        <div id="controlsSkeletonBar" class="controls-skeleton-bar shimmer hidden" aria-hidden="true"></div>
+
+        <div id="mainControlsRow" class="controls-row">
           <div class="field-group field-sprint">
             <label for="sprintSelect">Sprint</label>
             <select id="sprintSelect"></select>
           </div>
 
+          <div id="managementUserFilterGroup" class="field-group field-management-user hidden">
+            <label for="managementUserSelect">Analista</label>
+            <select id="managementUserSelect"></select>
+          </div>
+
           <div class="field-group field-toggle">
-            <label for="includeCurrentDayToggle">Considerar dia atual</label>
+            <div class="toggle-label-row">
+              <label for="includeCurrentDayToggle">Dia atual</label>
+              <button
+                id="includeCurrentDayHelperButton"
+                type="button"
+                class="toggle-helper-button"
+                title="Controla se o dia de hoje entra no cálculo das métricas da sprint."
+                aria-label="Ajuda sobre o switch Dia atual"
+              >
+                ?
+              </button>
+            </div>
             <label class="switch" for="includeCurrentDayToggle">
               <input id="includeCurrentDayToggle" type="checkbox" checked />
               <span class="switch-slider"></span>
@@ -87,6 +105,12 @@
           <h2>Configurações</h2>
         </div>
 
+        <div id="profileSwitcher" class="profile-switcher" role="tablist" aria-label="Perfis de visualização">
+          <button id="profileAnalystButton" type="button" class="profile-switcher-button" data-profile="analyst">Analista</button>
+          <button id="profileTestsButton" type="button" class="profile-switcher-button" data-profile="tests">Testes</button>
+          <button id="profileManagementButton" type="button" class="profile-switcher-button" data-profile="management">Gerência</button>
+        </div>
+
         <div class="field-group">
           <label for="tokenSelect">Token</label>
           <div class="token-select-row">
@@ -109,11 +133,6 @@
         <div class="field-group">
           <label for="teamSelect">Time</label>
           <select id="teamSelect"></select>
-        </div>
-
-        <div class="field-group">
-          <label for="userSelect">Usuário</label>
-          <select id="userSelect"></select>
         </div>
 
         <section id="statusMappingSection" class="status-mapping-section">
@@ -159,6 +178,11 @@
             <span class="back-arrow-icon">➜</span>
           </button>
           <h2 id="changesViewTitle">Alterações desde o último dia útil</h2>
+        </div>
+
+        <div id="changesManagementFilterRow" class="field-group hidden">
+          <label for="managementUserSelectChanges">Analista</label>
+          <select id="managementUserSelectChanges"></select>
         </div>
 
         <div id="topPaginationControls" class="list-pagination-controls">

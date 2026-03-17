@@ -1,6 +1,68 @@
-async function listRecentChanges() {
-	const dataset = await loadSprintDataset();
-	const ctxKey = contextCacheKey(dataset.settings);
+function sortRevisionsByRevAscending(revisions) {
+	const source = Array.isArray(revisions) ? revisions : [];
+	return [...source].sort((left, right) => Number(left?.rev || 0) - Number(right?.rev || 0));
+}
+
+async function fetchAllWorkItemRevisions(settings, workItemId, pageSize = 200) {
+	const all = [];
+	let skip = 0;
+	let pageCount = 0;
+	while (pageCount < 200) {
+		const response = await azureFetchJson(
+			`https://dev.azure.com/${encodePathPart(settings.organization)}/${encodePathPart(settings.projectName)}/_apis/wit/workItems/${encodePathPart(workItemId)}/revisions?$top=${pageSize}&$skip=${skip}&api-version=${API_VERSION}`,
+			{ tokenValue: settings.tokenValue },
+		);
+		const page = Array.isArray(response?.value) ? response.value : [];
+		if (!page.length) break;
+		all.push(...page);
+		skip += page.length;
+		pageCount += 1;
+		if (page.length < pageSize) break;
+	}
+	return all;
+}
+
+async function enrichItemsForTestsProfile(settings, items) {
+	const source = Array.isArray(items) ? items : [];
+	return Promise.all(
+		source.map(async (item) => {
+			try {
+				const revisions = await fetchAllWorkItemRevisions(settings, item.id, 200);
+				const values = sortRevisionsByRevAscending(revisions);
+				for (let index = values.length - 1; index > 0; index -= 1) {
+					const current = values[index];
+					const previous = values[index - 1];
+					const currentState = String(current?.fields?.["System.State"] || "").trim();
+					const previousState = String(previous?.fields?.["System.State"] || "").trim();
+					if (!currentState || !previousState || currentState === previousState) continue;
+					const changedBy = current?.fields?.["System.ChangedBy"] || null;
+					const changedDate = String(current?.fields?.["System.ChangedDate"] || current?.revisedDate || "").trim();
+					return {
+						...item,
+						lastStateChangedByName:
+							String(changedBy?.displayName || changedBy?.name || changedBy?.uniqueName || "").trim() || "-",
+						lastStateTransitionText: `${previousState} -> ${currentState}`,
+						lastStateTransitionDate: changedDate,
+					};
+				}
+			} catch {
+				// Ignore transition enrichment failures.
+			}
+
+			return {
+				...item,
+				lastStateChangedByName:
+					String(item?.assignedTo?.displayName || item?.assignedTo?.name || item?.assignedTo?.uniqueName || "").trim() || "-",
+				lastStateTransitionText: "-",
+				lastStateTransitionDate: String(item?.changedDate || "").trim(),
+			};
+		}),
+	);
+}
+
+async function listRecentChanges(options = {}) {
+	const dataset = await loadSprintDataset(options);
+	const ctxKey = `${contextCacheKey(dataset.settings)}|${dataset.profile}|${getTargetUserCacheKey(dataset.targetUser)}`;
 
 	if (isFresh(cache.recentChanges, TTL.recentChanges) && cache.recentChanges?.key === ctxKey) {
 		return cache.recentChanges.data;
@@ -105,8 +167,10 @@ async function listRecentChanges() {
 		.filter(Boolean)
 		.sort((a, b) => String(b.changedDate).localeCompare(String(a.changedDate)));
 
-	cache.recentChanges = { data: items, at: Date.now(), key: ctxKey };
-	return items;
+	const finalItems = dataset.profile === VIEW_PROFILES.TESTS ? await enrichItemsForTestsProfile(dataset.settings, items) : items;
+
+	cache.recentChanges = { data: finalItems, at: Date.now(), key: ctxKey };
+	return finalItems;
 }
 
 function hasPendingCriticalAnalysisReport(fields = {}) {
@@ -137,11 +201,13 @@ function buildCriticalPendingAnalysesWiql(projectName, iterationPaths, targetUse
 	const iterationsClause = iterationPaths
 		.map((path) => `'${String(path || "").replace(/'/g, "''")}'`)
 		.join(", ");
+	const assignedToCondition = buildAssignedToCondition(targetUser);
+	const assignedToClause = assignedToCondition ? ` AND ${assignedToCondition}` : "";
 
 	return (
 		`SELECT [System.Id] FROM WorkItems` +
 		` WHERE [System.TeamProject] = '${escapedProject}'` +
-		` AND ${buildAssignedToCondition(targetUser)}` +
+		assignedToClause +
 		` AND [System.IterationPath] IN (${iterationsClause})` +
 		` AND [Microsoft.VSTS.Scheduling.CompletedWork] > 0` +
 		` AND (` +
@@ -176,8 +242,8 @@ async function fetchCriticalPendingWorkItemsBatch(settings, ids) {
 	return items;
 }
 
-async function listCriticalPendingAnalyses() {
-	const dataset = await loadSprintDataset();
+async function listCriticalPendingAnalyses(options = {}) {
+	const dataset = await loadSprintDataset(options);
 	const scopedSprints = (dataset.sprints || []).slice(0, 3);
 	if (!scopedSprints.length) return [];
 
@@ -221,5 +287,10 @@ async function listCriticalPendingAnalyses() {
 		});
 	}
 
-	return items.sort((left, right) => String(right.changedDate || "").localeCompare(String(left.changedDate || "")));
+	const sorted = items.sort((left, right) => String(right.changedDate || "").localeCompare(String(left.changedDate || "")));
+	if (dataset.profile !== VIEW_PROFILES.TESTS) {
+		return sorted;
+	}
+
+	return enrichItemsForTestsProfile(dataset.settings, sorted);
 }

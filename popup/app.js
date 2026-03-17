@@ -8,6 +8,21 @@ function openItemInAzure(url) {
 }
 
 const UI_STATE_STORAGE_KEY = "popupUiState";
+const PROFILE_STORAGE_KEY = "popupSelectedProfile";
+const PROFILES = {
+	ANALYST: "analyst",
+	TESTS: "tests",
+	MANAGEMENT: "management",
+};
+
+const SCOPES = {
+	ME: "me",
+	SPECIFIC_USER: "specific-user",
+	ALL_USERS: "all-users",
+};
+
+const MANAGEMENT_ALL_USERS_VALUE = "__all_analysts__";
+
 const LIST_MODE_TITLES = {
 	recent: "Alterações desde o último dia útil",
 	critical: "Análises críticas pendentes",
@@ -26,6 +41,171 @@ const LIST_MODE_EMPTY_MESSAGES = {
 	"metric:finished": "Nenhuma tarefa finalizada encontrada para a sprint selecionada.",
 };
 
+function getActiveProfile() {
+	const normalized = String(PopupState.activeProfile || "").trim().toLowerCase();
+	if (normalized === PROFILES.TESTS) return PROFILES.TESTS;
+	if (normalized === PROFILES.MANAGEMENT) return PROFILES.MANAGEMENT;
+	return PROFILES.ANALYST;
+}
+
+function getSettingsDraftProfile() {
+	const normalized = String(PopupState.settingsDraftProfile || PopupState.activeProfile || "").trim().toLowerCase();
+	if (normalized === PROFILES.TESTS) return PROFILES.TESTS;
+	if (normalized === PROFILES.MANAGEMENT) return PROFILES.MANAGEMENT;
+	return PROFILES.ANALYST;
+}
+
+function getUserScopeForActiveProfile() {
+	const profile = getActiveProfile();
+	if (profile === PROFILES.ANALYST) {
+		return { scope: SCOPES.ME, selectedUser: null };
+	}
+
+	if (profile === PROFILES.TESTS) {
+		return { scope: SCOPES.ALL_USERS, selectedUser: null };
+	}
+
+	const selectedUserId = String(PopupState.managementSelectedUserId || "").trim();
+	if (!selectedUserId || selectedUserId === MANAGEMENT_ALL_USERS_VALUE) {
+		return { scope: SCOPES.ALL_USERS, selectedUser: null };
+	}
+
+	const selectedUser = PopupState.availableUsers.find((user) => String(user.value) === selectedUserId) || null;
+	if (!selectedUser) {
+		return { scope: SCOPES.ALL_USERS, selectedUser: null };
+	}
+
+	return {
+		scope: SCOPES.SPECIFIC_USER,
+		selectedUser: {
+			id: selectedUser.id || selectedUser.value,
+			descriptor: selectedUser.descriptor || "",
+			uniqueName: selectedUser.uniqueName || "",
+			name: selectedUser.name || selectedUser.label || "",
+		},
+	};
+}
+
+function getStatusRegionLabelsByProfile(profile = getActiveProfile()) {
+	if (profile === PROFILES.TESTS) {
+		return {
+			pending: "Pendentes",
+			validating: "Liberados",
+			finished: "",
+		};
+	}
+
+	return {
+		pending: "Andamento",
+		validating: "Validando",
+		finished: "Finalizadas",
+	};
+}
+
+async function getSavedProfile() {
+	try {
+		const stored = await chrome.storage.local.get(PROFILE_STORAGE_KEY);
+		const value = String(stored?.[PROFILE_STORAGE_KEY] || "").trim().toLowerCase();
+		if (value === PROFILES.TESTS) return PROFILES.TESTS;
+		if (value === PROFILES.MANAGEMENT) return PROFILES.MANAGEMENT;
+	} catch {
+		// Ignore profile persistence errors.
+	}
+	return PROFILES.ANALYST;
+}
+
+async function saveProfile(profile) {
+	try {
+		await chrome.storage.local.set({ [PROFILE_STORAGE_KEY]: profile });
+	} catch {
+		// Ignore profile persistence errors.
+	}
+}
+
+function updateProfileSwitcherUi() {
+	const profile = getSettingsDraftProfile();
+	PopupDom.profileAnalystButton.classList.toggle("active", profile === PROFILES.ANALYST);
+	PopupDom.profileTestsButton.classList.toggle("active", profile === PROFILES.TESTS);
+	PopupDom.profileManagementButton.classList.toggle("active", profile === PROFILES.MANAGEMENT);
+}
+
+function applyStatusRegionLabels() {
+	const profile = getSettingsDraftProfile();
+	const labels = getStatusRegionLabelsByProfile(profile);
+	const zonesGrid = PopupDom.statusMappingSection.querySelector(".status-drop-zones-grid");
+	const wrappers = PopupDom.statusMappingSection.querySelectorAll(".status-drop-zone-wrapper");
+	const titles = PopupDom.statusMappingSection.querySelectorAll(".status-drop-zone-wrapper h4");
+	if (titles[0]) titles[0].textContent = labels.pending;
+	if (titles[1]) titles[1].textContent = labels.validating;
+	if (titles[2]) titles[2].textContent = labels.finished;
+	if (wrappers[2]) wrappers[2].classList.toggle("hidden", profile === PROFILES.TESTS);
+	if (zonesGrid) {
+		zonesGrid.style.gridTemplateColumns =
+			profile === PROFILES.TESTS ? "repeat(2, minmax(0, 1fr))" : "repeat(3, minmax(0, 1fr))";
+	}
+	const description = PopupDom.statusMappingSection.querySelector(".status-mapping-description");
+	if (description) {
+		description.textContent =
+			profile === PROFILES.TESTS
+				? `Arraste os chips de status para as regiões ${labels.pending} e ${labels.validating} para definir como cada status será contabilizado nas métricas e listagens. Você também pode ajustar a cor de cada status pelo seletor no próprio chip.`
+				: `Arraste os chips de status para as regiões ${labels.pending}, ${labels.validating} e ${labels.finished} para definir como cada status será contabilizado nas métricas e listagens. Você também pode ajustar a cor de cada status pelo seletor no próprio chip.`;
+	}
+}
+
+function applyProfileUiRules() {
+	const profile = getActiveProfile();
+	const isTests = profile === PROFILES.TESTS;
+	const isManagement = profile === PROFILES.MANAGEMENT;
+
+	PopupDom.managementUserFilterGroup.classList.toggle("hidden", !isManagement);
+	PopupDom.mainControlsRow?.classList.toggle("controls-analyst", profile === PROFILES.ANALYST);
+	PopupDom.mainControlsRow?.classList.toggle("controls-tests", profile === PROFILES.TESTS);
+	PopupDom.mainControlsRow?.classList.toggle("controls-management", isManagement);
+	PopupDom.includeCurrentDayToggle.closest(".field-toggle")?.classList.toggle("hidden", isTests);
+	PopupDom.recentButton.classList.toggle("hidden", isTests);
+	PopupDom.criticalPendingButton.classList.toggle("hidden", isTests);
+	PopupDom.changesManagementFilterRow.classList.toggle(
+		"hidden",
+		!(isManagement && !PopupDom.changesView.classList.contains("hidden") && PopupDom.detailSection.classList.contains("hidden")),
+	);
+	if (isTests) {
+		PopupDom.includeCurrentDayToggle.checked = true;
+	}
+	updateSprintSelectAutoWidth();
+	applyStatusRegionLabels();
+	updateProfileSwitcherUi();
+}
+
+async function setActiveProfile(profile, { persist = true, reloadData = true } = {}) {
+	const normalized = String(profile || "").trim().toLowerCase();
+	PopupState.activeProfile =
+		normalized === PROFILES.TESTS ? PROFILES.TESTS : normalized === PROFILES.MANAGEMENT ? PROFILES.MANAGEMENT : PROFILES.ANALYST;
+
+	if (persist) {
+		await saveProfile(PopupState.activeProfile);
+	}
+
+	applyProfileUiRules();
+	if (PopupState.hasCompleteSettings && reloadData) {
+		await runSettingsAction(async () => {
+			await loadProjectStatusDiscoveryAndMapping();
+			await refreshSprintsAndMetrics("Falha ao atualizar dados após troca de perfil.");
+		}, "Falha ao alternar perfil.");
+	}
+	markSettingsAsSaved();
+}
+
+async function commitActiveProfile(profile, { persist = true } = {}) {
+	const normalized = String(profile || "").trim().toLowerCase();
+	PopupState.activeProfile =
+		normalized === PROFILES.TESTS ? PROFILES.TESTS : normalized === PROFILES.MANAGEMENT ? PROFILES.MANAGEMENT : PROFILES.ANALYST;
+	PopupState.settingsDraftProfile = PopupState.activeProfile;
+	if (persist) {
+		await saveProfile(PopupState.activeProfile);
+	}
+	applyProfileUiRules();
+}
+
 const STATUS_REGION_DEFAULT_COLORS = {
 	pool: "#6b7280",
 	pending: "#0f6cbd",
@@ -33,11 +213,29 @@ const STATUS_REGION_DEFAULT_COLORS = {
 	finished: "#0f7a31",
 };
 
+const STATUS_REGION_DEFAULT_COLORS_TESTS = {
+	pool: "#6b7280",
+	pending: "#b58900",
+	validating: "#0f7a31",
+	finished: "#0f7a31",
+};
+
 function getListTitleByMode(mode) {
+	if (getActiveProfile() === PROFILES.TESTS) {
+		if (mode === "metric:pending") return "Itens pendentes";
+		if (mode === "metric:validating") return "Itens liberados";
+		if (mode === "metric:finished") return "Itens finalizados";
+		if (mode === "metric:started") return "Total de itens";
+	}
 	return LIST_MODE_TITLES[mode] || LIST_MODE_TITLES.recent;
 }
 
 function getListEmptyMessageByMode(mode) {
+	if (getActiveProfile() === PROFILES.TESTS) {
+		if (mode === "metric:pending") return "Nenhum item pendente encontrado para a sprint selecionada.";
+		if (mode === "metric:validating") return "Nenhum item liberado encontrado para a sprint selecionada.";
+		if (mode === "metric:finished") return "Nenhum item finalizado encontrado para a sprint selecionada.";
+	}
 	return LIST_MODE_EMPTY_MESSAGES[mode] || LIST_MODE_EMPTY_MESSAGES.recent;
 }
 
@@ -54,6 +252,20 @@ function normalizeStatusValues(values) {
 		normalized.push(text);
 	}
 	return normalized;
+}
+
+function sanitizeDisplayedUserName(value) {
+	const text = String(value || "").trim();
+	if (!text) return "";
+	return text.replace(/\s*\([^)]*\)\s*/g, " ").replace(/\s{2,}/g, " ").trim();
+}
+
+function shortenUserNameToTwoParts(value) {
+	const normalized = sanitizeDisplayedUserName(value);
+	if (!normalized) return "";
+	const parts = normalized.split(" ").filter(Boolean);
+	if (parts.length <= 2) return normalized;
+	return `${parts[0]} ${parts[1]}`;
 }
 
 function normalizeStatusMapping(mapping = {}) {
@@ -97,6 +309,9 @@ function createEmptyStatusMappingDraft() {
 }
 
 function getRegionDefaultColor(zoneKey) {
+	if (getSettingsDraftProfile() === PROFILES.TESTS) {
+		return STATUS_REGION_DEFAULT_COLORS_TESTS[zoneKey] || STATUS_REGION_DEFAULT_COLORS_TESTS.pool;
+	}
 	return STATUS_REGION_DEFAULT_COLORS[zoneKey] || STATUS_REGION_DEFAULT_COLORS.pool;
 }
 
@@ -330,16 +545,21 @@ function updateStatusMappingFormState() {
 function renderStatusMappingSection() {
 	const mapping = normalizeStatusMapping(PopupState.currentProjectStatusMapping || {});
 	const availableStates = normalizeStatusValues(PopupState.availableProjectStates || mapping.availableStates || []);
+	const labels = getStatusRegionLabelsByProfile(getSettingsDraftProfile());
 	PopupState.availableProjectStates = availableStates;
 	PopupState.statusMappingDraft = buildStatusMappingDraft(mapping, availableStates);
 	renderStatusMappingDraft();
+	applyStatusRegionLabels();
 
 	if (!availableStates.length) {
 		PopupDom.statusMappingStatus.classList.remove("hidden");
 		PopupDom.statusMappingStatus.textContent = "Selecione organização e projeto para carregar os status disponíveis.";
 	} else if (!mapping.configured) {
 		PopupDom.statusMappingStatus.classList.remove("hidden");
-		PopupDom.statusMappingStatus.textContent = "Mapeamento obrigatório: classifique os status do projeto antes de usar métricas e listagens.";
+		PopupDom.statusMappingStatus.textContent =
+			getSettingsDraftProfile() === PROFILES.TESTS
+				? `Mapeamento obrigatório: classifique os status do projeto em ${labels.pending} e ${labels.validating} antes de usar métricas e listagens.`
+				: `Mapeamento obrigatório: classifique os status do projeto em ${labels.pending}, ${labels.validating} e ${labels.finished} antes de usar métricas e listagens.`;
 	} else {
 		PopupDom.statusMappingStatus.classList.add("hidden");
 	}
@@ -364,6 +584,31 @@ function normalizeItemsPerPage(value) {
 	if (numeric === 20) return 20;
 	if (numeric === 40) return 40;
 	return 10;
+}
+
+function updateSprintSelectAutoWidth() {
+	const select = PopupDom.sprintSelect;
+	if (!select) return;
+	if (getActiveProfile() !== PROFILES.MANAGEMENT) {
+		select.style.width = "";
+		return;
+	}
+
+	const texts = Array.from(select.options || []).map((option) => String(option?.textContent || "").trim()).filter(Boolean);
+	const longestText = texts.reduce((longest, current) => (current.length > longest.length ? current : longest), "");
+	if (!longestText) {
+		select.style.width = "";
+		return;
+	}
+
+	const computed = window.getComputedStyle(select);
+	const canvas = document.createElement("canvas");
+	const context = canvas.getContext("2d");
+	if (!context) return;
+	context.font = computed.font;
+	const contentWidth = Math.ceil(context.measureText(longestText).width);
+	const horizontalPadding = 44;
+	select.style.width = `${contentWidth + horizontalPadding}px`;
 }
 
 function getTotalPagesForCurrentList() {
@@ -469,8 +714,10 @@ async function getSavedUiStateSnapshot() {
 async function saveUiStateSnapshot(overrides = {}) {
 	const snapshot = {
 		view: getCurrentViewName(),
+		profile: getActiveProfile(),
 		listMode: PopupState.currentListMode || "recent",
 		sprintId: String(PopupDom.sprintSelect?.value || "").trim(),
+		managementSelectedUserId: String(PopupState.managementSelectedUserId || "").trim(),
 		includeCurrentDay: Boolean(PopupDom.includeCurrentDayToggle?.checked),
 		detailItemId: String(PopupState.currentDetailItemId || "").trim(),
 		detailItemUrl: String(PopupState.currentDetailItemUrl || "").trim(),
@@ -492,6 +739,10 @@ async function saveUiStateSnapshot(overrides = {}) {
 
 function applySavedUiStateInputs(savedUiState) {
 	if (!savedUiState) return;
+	if (typeof savedUiState.managementSelectedUserId === "string") {
+		const restored = String(savedUiState.managementSelectedUserId || "").trim();
+		PopupState.managementSelectedUserId = restored === MANAGEMENT_ALL_USERS_VALUE ? "" : restored;
+	}
 	if (typeof savedUiState.includeCurrentDay === "boolean") {
 		PopupDom.includeCurrentDayToggle.checked = savedUiState.includeCurrentDay;
 	}
@@ -586,11 +837,12 @@ function endLoading() {
 	updateLoadingOverlayState();
 }
 
-function openConfirmationModal({ title, description, confirmText = "Sim", cancelText = "Não" }) {
+function openConfirmationModal({ title, description, confirmText = "Sim", cancelText = "Não", showConfirmButton = true }) {
 	PopupDom.confirmationTitle.textContent = title;
 	PopupDom.confirmationDescription.textContent = description;
 	PopupDom.confirmationConfirmButton.textContent = confirmText;
 	PopupDom.confirmationCancelButton.textContent = cancelText;
+	PopupDom.confirmationConfirmButton.classList.toggle("hidden", !showConfirmButton);
 	PopupDom.confirmationOverlay.classList.remove("hidden");
 	PopupDom.confirmationOverlay.setAttribute("aria-hidden", "false");
 	requestAnimationFrame(() => {
@@ -637,10 +889,6 @@ function getTokenScopedSettingsByTokenId(tokenId) {
 			projectName: "",
 			teamId: "",
 			teamName: "",
-			selectedUserId: "",
-			selectedUserName: "",
-			selectedUserUniqueName: "",
-			selectedUserDescriptor: "",
 		};
 	}
 
@@ -650,22 +898,13 @@ function getTokenScopedSettingsByTokenId(tokenId) {
 		projectName: String(PopupState.tokenSettingsByTokenId[key]?.projectName || "").trim(),
 		teamId: String(PopupState.tokenSettingsByTokenId[key]?.teamId || "").trim(),
 		teamName: String(PopupState.tokenSettingsByTokenId[key]?.teamName || "").trim(),
-		selectedUserId: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserId || "").trim(),
-		selectedUserName: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserName || "").trim(),
-		selectedUserUniqueName: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserUniqueName || "").trim(),
-		selectedUserDescriptor: String(PopupState.tokenSettingsByTokenId[key]?.selectedUserDescriptor || "").trim(),
 	};
-}
-
-function getSelectedUserValue(settings = {}) {
-	return String(settings.selectedUserId || settings.selectedUserDescriptor || settings.selectedUserUniqueName || "").trim();
 }
 
 function populateEmptySettingsSelects() {
 	PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organização", "");
 	PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 	PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
-	PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 	PopupState.availableUsers = [];
 }
 
@@ -675,8 +914,6 @@ function previewTokenScopedSettings(settings = {}) {
 	const projectName = String(settings.projectName || projectId || "").trim();
 	const teamId = String(settings.teamId || "").trim();
 	const teamName = String(settings.teamName || teamId || "").trim();
-	const userValue = getSelectedUserValue(settings);
-	const userName = String(settings.selectedUserName || userValue || "").trim();
 
 	PopupRender.populateSelect(
 		PopupDom.organizationSelect,
@@ -696,24 +933,6 @@ function previewTokenScopedSettings(settings = {}) {
 		"Selecione um time",
 		teamId,
 	);
-	PopupRender.populateSelect(
-		PopupDom.userSelect,
-		userValue ? [{ value: userValue, label: userName, id: settings.selectedUserId || userValue, name: userName }] : [],
-		"Eu mesmo",
-		userValue,
-	);
-
-	PopupState.availableUsers = userValue
-		? [
-			{
-				value: userValue,
-				id: settings.selectedUserId || userValue,
-				name: userName,
-				uniqueName: settings.selectedUserUniqueName || "",
-				descriptor: settings.selectedUserDescriptor || "",
-			},
-		]
-		: [];
 }
 
 async function loadTokenScopedSettings(tokenId, { shouldRefreshFromStorage = false } = {}) {
@@ -734,16 +953,14 @@ async function loadTokenScopedSettings(tokenId, { shouldRefreshFromStorage = fal
 	}
 
 	const scopedSettings = getTokenScopedSettingsByTokenId(selectedTokenId);
-	const selectedUserValue = getSelectedUserValue(scopedSettings);
 	previewTokenScopedSettings(scopedSettings);
 
 	await loadOrganizations(scopedSettings.organization || "");
 	if (scopedSettings.organization) {
-		await loadProjects(scopedSettings.projectId || "", scopedSettings.teamId || "", selectedUserValue);
+		await loadProjects(scopedSettings.projectId || "", scopedSettings.teamId || "");
 	} else {
 		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
-		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
 	}
 
@@ -772,6 +989,7 @@ function showDetail(item) {
 	PopupDom.detailMeta.innerHTML = "";
 	const card = PopupRender.buildItemCard(item, {
 		clickable: false,
+		profile: getActiveProfile(),
 		criticalAlertText: PopupState.currentListMode === "critical" ? item.criticalAlertText : "",
 	});
 	card.classList.add("detail-card");
@@ -781,6 +999,8 @@ function showDetail(item) {
 	PopupState.currentDetailItemId = String(item?.id || "").trim();
 	PopupState.currentDetailItemUrl = item.itemUrl || "";
 	PopupDom.detailOpenLinkButton.classList.toggle("hidden", !PopupState.currentDetailItemUrl);
+	PopupDom.criticalAnalysisButton.textContent =
+		getActiveProfile() === PROFILES.MANAGEMENT ? "Requerir análise crítica" : "Fazer análise crítica";
 	PopupDom.criticalAnalysisButton.classList.toggle(
 		"hidden",
 		PopupState.currentListMode !== "critical" || !PopupState.currentDetailItemUrl,
@@ -789,6 +1009,7 @@ function showDetail(item) {
 	PopupDom.detailSection.classList.remove("hidden");
 	PopupDom.topPaginationControls.classList.add("hidden");
 	PopupDom.bottomPaginationControls.classList.add("hidden");
+	applyProfileUiRules();
 	persistUiStateIfNeeded();
 
 	requestAnimationFrame(() => {
@@ -809,6 +1030,7 @@ function showList() {
 	PopupDom.detailSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
 	PopupDom.topPaginationControls.classList.remove("hidden");
+	applyProfileUiRules();
 	updateBottomPaginationVisibility();
 	persistUiStateIfNeeded();
 	requestAnimationFrame(() => {
@@ -836,6 +1058,7 @@ function showChangesView(mode = "recent") {
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.remove("hidden");
 	PopupDom.topPaginationControls.classList.remove("hidden");
+	applyProfileUiRules();
 	updatePaginationControls();
 	updateBottomPaginationVisibility();
 	persistUiStateIfNeeded();
@@ -853,6 +1076,7 @@ function showSettingsView() {
 	PopupDom.settingsView.classList.remove("hidden");
 	PopupDom.topPaginationControls.classList.add("hidden");
 	PopupDom.bottomPaginationControls.classList.add("hidden");
+	applyProfileUiRules();
 	persistUiStateIfNeeded();
 }
 
@@ -877,6 +1101,7 @@ function showInitialView() {
 	PopupDom.topPaginationControls.classList.add("hidden");
 	PopupDom.bottomPaginationControls.classList.add("hidden");
 	PopupDom.initialView.classList.remove("hidden");
+	applyProfileUiRules();
 	persistUiStateIfNeeded();
 }
 
@@ -904,6 +1129,7 @@ function renderCurrentListPage({ mode = "recent" } = {}) {
 
 	for (const item of pageItems) {
 		const card = PopupRender.buildItemCard(item, {
+			profile: getActiveProfile(),
 			criticalAlertText: isCriticalMode ? item.criticalAlertText : "",
 		});
 		card.addEventListener("click", () => showDetail(item));
@@ -944,7 +1170,14 @@ async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
 	}
 
 	try {
-		const response = await PopupApi.listSprintItemsByMetricBucket(sprintId, bucket);
+		const userScope = getUserScopeForActiveProfile();
+		const response = await PopupApi.listSprintItemsByMetricBucket(
+			sprintId,
+			bucket,
+			getActiveProfile(),
+			userScope.scope,
+			userScope.selectedUser,
+		);
 		if (!response?.ok) {
 			PopupDom.recentList.textContent = response?.error || "Erro ao buscar tarefas da métrica selecionada.";
 			return;
@@ -986,7 +1219,6 @@ function updateSettingsFormState() {
 	PopupDom.organizationSelect.disabled = !tokenId;
 	PopupDom.projectSelect.disabled = !organization;
 	PopupDom.teamSelect.disabled = !projectId;
-	PopupDom.userSelect.disabled = !teamId;
 	PopupDom.saveSettingsButton.disabled = !(tokenId && organization && projectId && teamId);
 }
 
@@ -1020,15 +1252,14 @@ function buildSettingsSavedSignature() {
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const projectId = String(PopupDom.projectSelect.value || "").trim();
 	const teamId = String(PopupDom.teamSelect.value || "").trim();
-	const userId = String(PopupDom.userSelect.value || "").trim();
 	const buckets = getStatusBucketsFromDraft();
 
 	return JSON.stringify({
+		profile: getSettingsDraftProfile(),
 		tokenId,
 		organization,
 		projectId,
 		teamId,
-		userId,
 		buckets: {
 			pending: normalizeSignatureList(buckets.pending),
 			validating: normalizeSignatureList(buckets.validating),
@@ -1094,15 +1325,28 @@ async function loadTokens(selectedTokenId = "") {
 	updateSettingsFormState();
 }
 
-async function loadProjects(selectedProjectId = "", selectedTeamId = "", selectedUserId = "") {
+function populateManagementUsersSelect(selectedUserId = "") {
+	const rawSelectedValue = String(selectedUserId || "").trim();
+	const selectedValue = rawSelectedValue === MANAGEMENT_ALL_USERS_VALUE ? "" : rawSelectedValue;
+	const options = [
+		...(PopupState.availableUsers || []).map((user) => ({
+			value: user.value,
+			label: shortenUserNameToTwoParts(user.label || user.name || user.uniqueName || "") || user.label,
+		})),
+	];
+	PopupRender.populateSelect(PopupDom.managementUserSelect, options, "Todos os analistas", selectedValue);
+	PopupRender.populateSelect(PopupDom.managementUserSelectChanges, options, "Todos os analistas", selectedValue);
+}
+
+async function loadProjects(selectedProjectId = "", selectedTeamId = "") {
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const tokenValue = getSelectedTokenValue();
 
 	if (!organization || !tokenValue) {
 		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
-		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		populateManagementUsersSelect("");
 		updateSettingsFormState();
 		return;
 	}
@@ -1120,11 +1364,11 @@ async function loadProjects(selectedProjectId = "", selectedTeamId = "", selecte
 	PopupRender.populateSelect(PopupDom.projectSelect, projectOptions, "Selecione um projeto", selectedProjectId);
 
 	if (selectedProjectId) {
-		await loadTeams(selectedProjectId, selectedTeamId, selectedUserId);
+		await loadTeams(selectedProjectId, selectedTeamId);
 	} else {
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
-		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		populateManagementUsersSelect("");
 	}
 
 	updateSettingsFormState();
@@ -1137,8 +1381,8 @@ async function loadOrganizations(selectedOrganization = "") {
 		PopupRender.populateSelect(PopupDom.organizationSelect, [], "Selecione uma organização", "");
 		PopupRender.populateSelect(PopupDom.projectSelect, [], "Selecione um projeto", "");
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
-		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		populateManagementUsersSelect("");
 		updateSettingsFormState();
 		return;
 	}
@@ -1155,14 +1399,14 @@ async function loadOrganizations(selectedOrganization = "") {
 	updateSettingsFormState();
 }
 
-async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamId = "", selectedUserId = "") {
+async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamId = "") {
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const tokenValue = getSelectedTokenValue();
 
 	if (!organization || !tokenValue || !projectId) {
 		PopupRender.populateSelect(PopupDom.teamSelect, [], "Selecione um time", "");
-		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		populateManagementUsersSelect("");
 		updateSettingsFormState();
 		return;
 	}
@@ -1178,10 +1422,10 @@ async function loadTeams(projectId = PopupDom.projectSelect.value, selectedTeamI
 	PopupRender.populateSelect(PopupDom.teamSelect, teamOptions, "Selecione um time", selectedTeamId);
 
 	if (selectedTeamId) {
-		await loadUsers(projectId, selectedTeamId, selectedUserId);
+		await loadUsers(projectId, selectedTeamId, PopupState.managementSelectedUserId);
 	} else {
-		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		populateManagementUsersSelect("");
 	}
 
 	updateSettingsFormState();
@@ -1192,8 +1436,8 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 	const tokenValue = getSelectedTokenValue();
 
 	if (!organization || !tokenValue || !projectId || !teamId) {
-		PopupRender.populateSelect(PopupDom.userSelect, [], "Eu mesmo", "");
 		PopupState.availableUsers = [];
+		populateManagementUsersSelect("");
 		updateSettingsFormState();
 		return;
 	}
@@ -1202,7 +1446,8 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar usuarios.");
 
 	const userOptions = [...(response.users || [])];
-	const selectedUserLabel = PopupDom.userSelect.options[PopupDom.userSelect.selectedIndex]?.text || selectedUserId || "";
+	const selectedUserLabel =
+		PopupDom.managementUserSelect.options[PopupDom.managementUserSelect.selectedIndex]?.text || selectedUserId || "";
 	if (selectedUserId && !userOptions.some((entry) => String(entry.value) === String(selectedUserId))) {
 		userOptions.unshift({
 			value: selectedUserId,
@@ -1215,7 +1460,7 @@ async function loadUsers(projectId = PopupDom.projectSelect.value, teamId = Popu
 	}
 
 	PopupState.availableUsers = userOptions;
-	PopupRender.populateSelect(PopupDom.userSelect, PopupState.availableUsers, "Eu mesmo", selectedUserId || "");
+	populateManagementUsersSelect(selectedUserId || PopupState.managementSelectedUserId || "");
 	updateSettingsFormState();
 }
 
@@ -1233,7 +1478,14 @@ async function loadProjectStatusDiscoveryAndMapping() {
 		return;
 	}
 
-	const discoveryResponse = await PopupApi.listProjectWorkItemStates(organization, projectId, projectName, tokenValue);
+	const settingsProfile = getSettingsDraftProfile();
+	const discoveryResponse = await PopupApi.listProjectWorkItemStates(
+		organization,
+		projectId,
+		projectName,
+		tokenValue,
+		settingsProfile,
+	);
 	if (!discoveryResponse?.ok) {
 		throw new Error(discoveryResponse?.error || "Falha ao carregar status do projeto.");
 	}
@@ -1241,7 +1493,7 @@ async function loadProjectStatusDiscoveryAndMapping() {
 	PopupState.availableProjectStates = normalizeStatusValues(discoveryResponse.availableStates || []);
 	PopupState.availableProjectWorkItemTypes = normalizeStatusValues(discoveryResponse.workItemTypes || []);
 
-	const mappingResponse = await PopupApi.getProjectStatusMapping(organization, projectId);
+	const mappingResponse = await PopupApi.getProjectStatusMapping(organization, projectId, settingsProfile);
 	if (!mappingResponse?.ok) {
 		throw new Error(mappingResponse?.error || "Falha ao carregar mapeamento de status.");
 	}
@@ -1274,7 +1526,7 @@ async function saveCurrentProjectStatusMapping() {
 		statusColorOverrides,
 		availableStates: PopupState.availableProjectStates,
 		workItemTypes: PopupState.availableProjectWorkItemTypes,
-	});
+	}, getSettingsDraftProfile());
 
 	if (!response?.ok) {
 		throw new Error(response?.error || "Falha ao salvar mapeamento de status.");
@@ -1289,10 +1541,8 @@ async function saveCurrentSettings() {
 	const organization = String(PopupDom.organizationSelect.value || "").trim();
 	const projectId = PopupDom.projectSelect.value;
 	const teamId = PopupDom.teamSelect.value;
-	const selectedUserId = PopupDom.userSelect.value;
 	const projectName = PopupDom.projectSelect.options[PopupDom.projectSelect.selectedIndex]?.text || "";
 	const teamName = PopupDom.teamSelect.options[PopupDom.teamSelect.selectedIndex]?.text || "";
-	const selectedUser = PopupState.availableUsers.find((user) => String(user.value) === String(selectedUserId));
 
 	const response = await PopupApi.saveSettings({
 		selectedTokenId: selectedToken?.id || selectedToken?.value || PopupDom.tokenSelect.value,
@@ -1301,10 +1551,7 @@ async function saveCurrentSettings() {
 		projectName,
 		teamId,
 		teamName,
-		selectedUserId: selectedUser?.id || selectedUserId || "",
-		selectedUserName: selectedUser?.name || "",
-		selectedUserUniqueName: selectedUser?.uniqueName || "",
-		selectedUserDescriptor: selectedUser?.descriptor || "",
+		selectedProfile: getSettingsDraftProfile(),
 	});
 
 	if (!response?.ok) throw new Error(response?.error || "Falha ao salvar configuracoes.");
@@ -1317,10 +1564,6 @@ async function saveCurrentSettings() {
 			projectName,
 			teamId,
 			teamName,
-			selectedUserId: selectedUser?.id || selectedUserId || "",
-			selectedUserName: selectedUser?.name || "",
-			selectedUserUniqueName: selectedUser?.uniqueName || "",
-			selectedUserDescriptor: selectedUser?.descriptor || "",
 		};
 	}
 }
@@ -1343,10 +1586,11 @@ async function deleteCurrentToken() {
 }
 
 async function loadSprints() {
-	const response = await PopupApi.listSprints();
+	const response = await PopupApi.listSprints(getActiveProfile());
 	if (!response?.ok) throw new Error(response?.error || "Falha ao carregar sprints.");
 	const sprints = response.sprints || [];
 	PopupRender.populateSprintSelect(sprints, response.defaultSprint || "");
+	updateSprintSelectAutoWidth();
 	return sprints.length > 0;
 }
 
@@ -1359,7 +1603,15 @@ async function loadMetricsForCurrentSelection() {
 	}
 
 	PopupRender.showMetricsSkeleton();
-	const response = await PopupApi.collectMetrics(sprintId, PopupDom.includeCurrentDayToggle.checked);
+	const userScope = getUserScopeForActiveProfile();
+	const includeCurrentDay = getActiveProfile() === PROFILES.TESTS ? true : PopupDom.includeCurrentDayToggle.checked;
+	const response = await PopupApi.collectMetrics(
+		sprintId,
+		includeCurrentDay,
+		getActiveProfile(),
+		userScope.scope,
+		userScope.selectedUser,
+	);
 	if (!response?.ok) {
 		PopupRender.showResult(`Erro: ${response?.error || "Falha inesperada."}`);
 		persistUiStateIfNeeded();
@@ -1419,7 +1671,8 @@ async function loadRecentChanges(savedUiState = null) {
 	PopupRender.showRecentChangesSkeleton(3, { mode: "recent" });
 
 	try {
-		const response = await PopupApi.listRecentChanges();
+		const userScope = getUserScopeForActiveProfile();
+		const response = await PopupApi.listRecentChanges(getActiveProfile(), userScope.scope, userScope.selectedUser);
 		if (!response?.ok) {
 			PopupDom.recentList.textContent = response?.error || "Erro ao buscar itens.";
 			return;
@@ -1453,7 +1706,8 @@ async function loadCriticalPendingAnalyses(savedUiState = null) {
 	PopupRender.showRecentChangesSkeleton(3, { mode: "critical" });
 
 	try {
-		const response = await PopupApi.listCriticalPendingAnalyses();
+		const userScope = getUserScopeForActiveProfile();
+		const response = await PopupApi.listCriticalPendingAnalyses(getActiveProfile(), userScope.scope, userScope.selectedUser);
 		if (!response?.ok) {
 			PopupDom.recentList.textContent = response?.error || "Erro ao buscar análises críticas pendentes.";
 			return;
@@ -1476,6 +1730,9 @@ async function loadCriticalPendingAnalyses(savedUiState = null) {
 
 async function initializeSettingsView(savedSettings) {
 	PopupRender.applySettingsToInputs(savedSettings);
+	PopupState.activeProfile = String(savedSettings?.selectedProfile || PopupState.activeProfile || PROFILES.ANALYST).trim().toLowerCase();
+	PopupState.settingsDraftProfile = PopupState.activeProfile;
+	updateProfileSwitcherUi();
 	await loadTokens(savedSettings.selectedTokenId || "");
 	if (!PopupState.availableTokens.length) {
 		populateEmptySettingsSelects();
@@ -1642,9 +1899,46 @@ function bindEvents() {
 		});
 	}
 
-	PopupDom.userSelect.addEventListener("change", () => {
-		updateSettingsFormState();
-	});
+	const profileButtons = [
+		PopupDom.profileAnalystButton,
+		PopupDom.profileTestsButton,
+		PopupDom.profileManagementButton,
+	];
+
+	for (const button of profileButtons) {
+		button.addEventListener("click", async () => {
+			const profile = String(button.dataset.profile || PROFILES.ANALYST).trim().toLowerCase();
+			PopupState.settingsDraftProfile =
+				profile === PROFILES.TESTS ? PROFILES.TESTS : profile === PROFILES.MANAGEMENT ? PROFILES.MANAGEMENT : PROFILES.ANALYST;
+			updateProfileSwitcherUi();
+			await runSettingsAction(async () => {
+				await loadProjectStatusDiscoveryAndMapping();
+			}, "Falha ao alternar perfil na configuração.");
+		});
+	}
+
+	const handleManagementUserChange = (event) => {
+		const selected = String(event?.target?.value ?? "").trim();
+		PopupState.managementSelectedUserId = selected;
+		PopupDom.managementUserSelect.value = selected;
+		PopupDom.managementUserSelectChanges.value = selected;
+		persistUiStateIfNeeded();
+		if (getActiveProfile() === PROFILES.MANAGEMENT) {
+			runMetricsAction();
+			if (!PopupDom.changesView.classList.contains("hidden")) {
+				if (PopupState.currentListMode === "critical") {
+					loadCriticalPendingAnalyses();
+				} else if (String(PopupState.currentListMode || "").startsWith("metric:")) {
+					loadMetricItemsByBucket(String(PopupState.currentListMode).slice("metric:".length));
+				} else {
+					loadRecentChanges();
+				}
+			}
+		}
+	};
+
+	PopupDom.managementUserSelect.addEventListener("change", handleManagementUserChange);
+	PopupDom.managementUserSelectChanges.addEventListener("change", handleManagementUserChange);
 
 	PopupDom.sprintSelect.addEventListener("change", () => {
 		persistUiStateIfNeeded();
@@ -1652,11 +1946,50 @@ function bindEvents() {
 	});
 
 	PopupDom.includeCurrentDayToggle.addEventListener("change", () => {
+		if (getActiveProfile() === PROFILES.TESTS) {
+			PopupDom.includeCurrentDayToggle.checked = true;
+			return;
+		}
 		persistUiStateIfNeeded();
 		runMetricsAction();
 	});
 
+	PopupDom.includeCurrentDayHelperButton.addEventListener("click", () => {
+		void requestConfirmation({
+			title: "Como funciona o switch Dia atual",
+			description:
+				"Quando ativado, o cálculo considera os dias úteis da sprint até hoje, incluindo o dia atual.\n\n" +
+				"Quando desativado, o cálculo considera apenas os dias úteis já concluídos, sem contar o dia de hoje.\n\n" +
+				"Isso impacta principalmente a média diária mostrada nas métricas.",
+			cancelText: "Fechar",
+			showConfirmButton: false,
+		});
+	});
+
 	PopupDom.result.addEventListener("click", (event) => {
+		const analystChartRow = event.target?.closest?.("[data-analyst-full-name]");
+		if (analystChartRow && getActiveProfile() === PROFILES.MANAGEMENT) {
+			const analystName = sanitizeDisplayedUserName(String(analystChartRow.getAttribute("data-analyst-full-name") || "").trim());
+			if (!analystName) return;
+
+			const normalizedAnalystName = analystName.toLowerCase();
+			const matchingUser = (PopupState.availableUsers || []).find((user) => {
+				const candidates = [user?.label, user?.name, user?.uniqueName]
+					.map((candidate) => sanitizeDisplayedUserName(candidate || "").toLowerCase())
+					.filter(Boolean);
+				return candidates.includes(normalizedAnalystName);
+			});
+
+			if (matchingUser?.value) {
+				const selectedValue = String(matchingUser.value).trim();
+				if (selectedValue && PopupDom.managementUserSelect.value !== selectedValue) {
+					PopupDom.managementUserSelect.value = selectedValue;
+					PopupDom.managementUserSelect.dispatchEvent(new Event("change", { bubbles: true }));
+				}
+			}
+			return;
+		}
+
 		const tile = event.target?.closest?.("[data-metric-bucket]");
 		if (!tile) return;
 		const metricBucket = String(tile.getAttribute("data-metric-bucket") || "").trim();
@@ -1762,6 +2095,7 @@ function bindEvents() {
 	PopupDom.backFromSettingsButton.addEventListener("click", async () => {
 		const canLeave = await confirmLeaveSettingsViewIfNeeded();
 		if (!canLeave) return;
+		PopupState.settingsDraftProfile = PopupState.activeProfile;
 
 		showInitialView();
 
@@ -1782,7 +2116,40 @@ function bindEvents() {
 	});
 
 	PopupDom.criticalAnalysisButton.addEventListener("click", () => {
-		openItemInAzure(PopupState.currentDetailItemUrl);
+		void (async () => {
+			if (getActiveProfile() !== PROFILES.MANAGEMENT) {
+				openItemInAzure(PopupState.currentDetailItemUrl);
+				return;
+			}
+
+			const detailItem = PopupState.currentListItems.find((item) => String(item?.id || "") === String(PopupState.currentDetailItemId || ""));
+			if (!detailItem) {
+				PopupRender.showResult("Não foi possível localizar os dados do item selecionado.");
+				return;
+			}
+
+			const responsibleName =
+				sanitizeDisplayedUserName(detailItem?.assignedTo?.displayName || detailItem?.assignedTo?.name) || "responsável";
+			const confirmed = await requestConfirmation({
+				title: "Requerir análise crítica",
+				description: `Isso adicionará um comentário na discussion do item no Azure, mencionando ${responsibleName}. Deseja continuar?`,
+				confirmText: "Confirmar",
+				cancelText: "Cancelar",
+			});
+			if (!confirmed) return;
+
+			await runSettingsAction(async () => {
+				const response = await PopupApi.requireCriticalAnalysis(
+					PopupState.currentDetailItemId,
+					detailItem.assignedTo || null,
+					getActiveProfile(),
+				);
+				if (!response?.ok) {
+					throw new Error(response?.error || "Falha ao solicitar análise crítica.");
+				}
+				PopupRender.showSettingsStatus("Solicitação de análise crítica enviada com sucesso.");
+			}, "Falha ao solicitar análise crítica.");
+		})();
 	});
 
 	PopupDom.confirmationCancelButton.addEventListener("click", () => {
@@ -1815,12 +2182,16 @@ function bindEvents() {
 		}
 
 		const buckets = getStatusBucketsFromDraft();
-		const hasMissingBucket = !buckets.pending.length || !buckets.validating.length || !buckets.finished.length;
+		const hasMissingBucket =
+			getSettingsDraftProfile() === PROFILES.TESTS
+				? !buckets.pending.length || !buckets.validating.length
+				: !buckets.pending.length || !buckets.validating.length || !buckets.finished.length;
 		if (hasMissingBucket) {
+			const labels = getStatusRegionLabelsByProfile(getSettingsDraftProfile());
 			const confirmed = await requestConfirmation({
 				title: "Mapeamento de status incompleto",
 				description:
-					"Nem todas as regiões (Andamento, Validando e Finalizadas) possuem status. Deseja salvar mesmo assim?",
+					`Nem todas as regiões (${labels.pending}, ${labels.validating} e ${labels.finished}) possuem status. Deseja salvar mesmo assim?`,
 				confirmText: "Salvar mesmo assim",
 				cancelText: "Voltar",
 			});
@@ -1839,6 +2210,7 @@ function bindEvents() {
 
 		await runSettingsAction(async () => {
 			await saveCurrentSettings();
+			await commitActiveProfile(getSettingsDraftProfile());
 			PopupState.hasCompleteSettings = true;
 			if (!PopupState.availableProjectStates.length) {
 				await loadProjectStatusDiscoveryAndMapping();
@@ -1867,6 +2239,10 @@ async function init() {
 	try {
 		PopupState.isRestoringUiState = true;
 		const savedUiState = await getSavedUiStateSnapshot();
+		const savedProfile = await getSavedProfile();
+		PopupState.activeProfile = String(savedUiState?.profile || savedProfile || PROFILES.ANALYST).trim().toLowerCase();
+		PopupState.settingsDraftProfile = PopupState.activeProfile;
+		updateProfileSwitcherUi();
 		applySavedUiStateInputs(savedUiState);
 
 		const savedSettings = await withBlockingUi(async () => {
@@ -1943,6 +2319,7 @@ async function init() {
 		PopupRender.showResult(`Erro: ${error instanceof Error ? error.message : "Falha ao carregar a extensao."}`);
 	} finally {
 		PopupState.isRestoringUiState = false;
+		applyProfileUiRules();
 		persistUiStateIfNeeded();
 		updatePaginationControls();
 		updateBottomPaginationVisibility();

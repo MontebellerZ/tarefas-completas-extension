@@ -26,17 +26,21 @@ window.PopupApi = {
 		sendRuntimeMessage({ action: "listTeams", organization, projectId, tokenValue }),
 	listUsers: (organization, projectId, teamId, tokenValue) =>
 		sendRuntimeMessage({ action: "listUsers", organization, projectId, teamId, tokenValue }),
-	listSprints: () => sendRuntimeMessage({ action: "listSprints" }),
-	listProjectWorkItemStates: (organization, projectId, projectName, tokenValue) =>
-		sendRuntimeMessage({ action: "listProjectWorkItemStates", organization, projectId, projectName, tokenValue }),
-	getProjectStatusMapping: (organization, projectId) =>
-		sendRuntimeMessage({ action: "getProjectStatusMapping", organization, projectId }),
-	saveProjectStatusMapping: (organization, projectId, mapping) =>
-		sendRuntimeMessage({ action: "saveProjectStatusMapping", organization, projectId, mapping }),
-	collectMetrics: (sprintId, includeCurrentDay) =>
-		sendRuntimeMessage({ action: "openAzureAndCollect", sprintId, includeCurrentDay }),
-	listSprintItemsByMetricBucket: (sprintId, metricBucket) =>
-		sendRuntimeMessage({ action: "listSprintItemsByMetricBucket", sprintId, metricBucket }),
-	listRecentChanges: () => sendRuntimeMessage({ action: "listRecentChanges" }),
-	listCriticalPendingAnalyses: () => sendRuntimeMessage({ action: "listCriticalPendingAnalyses" }),
+	listSprints: (profile) => sendRuntimeMessage({ action: "listSprints", profile }),
+	listProjectWorkItemStates: (organization, projectId, projectName, tokenValue, profile) =>
+		sendRuntimeMessage({ action: "listProjectWorkItemStates", organization, projectId, projectName, tokenValue, profile }),
+	getProjectStatusMapping: (organization, projectId, profile) =>
+		sendRuntimeMessage({ action: "getProjectStatusMapping", organization, projectId, profile }),
+	saveProjectStatusMapping: (organization, projectId, mapping, profile) =>
+		sendRuntimeMessage({ action: "saveProjectStatusMapping", organization, projectId, mapping, profile }),
+	collectMetrics: (sprintId, includeCurrentDay, profile, scope = "me", selectedUser = null) =>
+		sendRuntimeMessage({ action: "openAzureAndCollect", sprintId, includeCurrentDay, profile, scope, selectedUser }),
+	listSprintItemsByMetricBucket: (sprintId, metricBucket, profile, scope = "me", selectedUser = null) =>
+		sendRuntimeMessage({ action: "listSprintItemsByMetricBucket", sprintId, metricBucket, profile, scope, selectedUser }),
+	listRecentChanges: (profile, scope = "me", selectedUser = null) =>
+		sendRuntimeMessage({ action: "listRecentChanges", profile, scope, selectedUser }),
+	listCriticalPendingAnalyses: (profile, scope = "me", selectedUser = null) =>
+		sendRuntimeMessage({ action: "listCriticalPendingAnalyses", profile, scope, selectedUser }),
+	requireCriticalAnalysis: (workItemId, responsibleIdentity, profile) =>
+		sendRuntimeMessage({ action: "requireCriticalAnalysis", workItemId, responsibleIdentity, profile }),
 };
