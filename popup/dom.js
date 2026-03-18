@@ -59,6 +59,8 @@ window.PopupDom = {
 	itemsPerPageSelectBottom: document.getElementById("itemsPerPageSelectBottom"),
 	bottomPaginationControls: document.getElementById("bottomPaginationControls"),
 	recentSection: document.getElementById("recentSection"),
+	trendSection: document.getElementById("trendSection"),
+	trendContent: document.getElementById("trendContent"),
 	changesViewTitle: document.getElementById("changesViewTitle"),
 	changesManagementFilterRow: document.getElementById("changesManagementFilterRow"),
 	managementUserSelectChanges: document.getElementById("managementUserSelectChanges"),

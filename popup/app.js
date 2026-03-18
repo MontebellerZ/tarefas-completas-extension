@@ -30,6 +30,9 @@ const LIST_MODE_TITLES = {
 	"metric:pending": "Tarefas em andamento",
 	"metric:validating": "Tarefas em validação",
 	"metric:finished": "Tarefas finalizadas",
+	"metric:not-started": "Tarefas não iniciadas",
+	"metric:unassigned": "Tarefas sem dono",
+	trend: "Tendência da sprint",
 };
 
 const LIST_MODE_EMPTY_MESSAGES = {
@@ -39,6 +42,8 @@ const LIST_MODE_EMPTY_MESSAGES = {
 	"metric:pending": "Nenhuma tarefa em andamento encontrada para a sprint selecionada.",
 	"metric:validating": "Nenhuma tarefa em validação encontrada para a sprint selecionada.",
 	"metric:finished": "Nenhuma tarefa finalizada encontrada para a sprint selecionada.",
+	"metric:not-started": "Nenhuma tarefa não iniciada encontrada para a sprint selecionada.",
+	"metric:unassigned": "Nenhuma tarefa sem dono encontrada para a sprint selecionada.",
 };
 
 function getActiveProfile() {
@@ -1006,6 +1011,7 @@ function showDetail(item) {
 		PopupState.currentListMode !== "critical" || !PopupState.currentDetailItemUrl,
 	);
 	PopupDom.recentSection.classList.add("hidden");
+	PopupDom.trendSection.classList.add("hidden");
 	PopupDom.detailSection.classList.remove("hidden");
 	PopupDom.topPaginationControls.classList.add("hidden");
 	PopupDom.bottomPaginationControls.classList.add("hidden");
@@ -1028,6 +1034,7 @@ function showList() {
 	PopupState.currentDetailItemUrl = "";
 	PopupDom.criticalAnalysisButton.classList.add("hidden");
 	PopupDom.detailSection.classList.add("hidden");
+	PopupDom.trendSection.classList.add("hidden");
 	PopupDom.recentSection.classList.remove("hidden");
 	PopupDom.topPaginationControls.classList.remove("hidden");
 	applyProfileUiRules();
@@ -1052,15 +1059,22 @@ function showChangesView(mode = "recent") {
 	PopupState.currentListMode = mode;
 	PopupDom.changesViewTitle.textContent = getListTitleByMode(mode);
 	PopupDom.criticalAnalysisButton.classList.add("hidden");
+	const isTrendMode = mode === "trend";
 
 	PopupDom.initialView.classList.add("hidden");
 	PopupDom.tokenSetupView.classList.add("hidden");
 	PopupDom.settingsView.classList.add("hidden");
 	PopupDom.changesView.classList.remove("hidden");
-	PopupDom.topPaginationControls.classList.remove("hidden");
+	PopupDom.topPaginationControls.classList.toggle("hidden", isTrendMode);
+	PopupDom.bottomPaginationControls.classList.toggle("hidden", isTrendMode);
+	PopupDom.detailSection.classList.add("hidden");
+	PopupDom.recentSection.classList.toggle("hidden", isTrendMode);
+	PopupDom.trendSection.classList.toggle("hidden", !isTrendMode);
 	applyProfileUiRules();
-	updatePaginationControls();
-	updateBottomPaginationVisibility();
+	if (!isTrendMode) {
+		updatePaginationControls();
+		updateBottomPaginationVisibility();
+	}
 	persistUiStateIfNeeded();
 }
 
@@ -1155,6 +1169,18 @@ async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
 	}
 
 	const bucket = String(metricBucket || "").trim().toLowerCase();
+	if (bucket === "recent") {
+		await loadRecentChanges(savedUiState);
+		return;
+	}
+	if (bucket === "critical") {
+		await loadCriticalPendingAnalyses(savedUiState);
+		return;
+	}
+	if (bucket === "trend") {
+		await loadTrendView();
+		return;
+	}
 	const mode = `metric:${bucket}`;
 	showChangesView(mode);
 	setPaginationLoadingState(true);
@@ -1198,6 +1224,44 @@ async function loadMetricItemsByBucket(metricBucket, savedUiState = null) {
 		PopupDom.recentList.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
 	} finally {
 		setPaginationLoadingState(false);
+	}
+}
+
+async function loadTrendView() {
+	if (!ensureStatusMappingReadyForDataViews()) {
+		return;
+	}
+
+	showChangesView("trend");
+	PopupDom.trendContent.textContent = "Carregando tendência...";
+
+	const sprintId = String(PopupDom.sprintSelect.value || "").trim();
+	if (!sprintId) {
+		PopupDom.trendContent.textContent = "Selecione uma sprint para visualizar a tendência.";
+		return;
+	}
+
+	try {
+		const userScope = getUserScopeForActiveProfile();
+		const includeCurrentDay = getActiveProfile() === PROFILES.TESTS ? true : PopupDom.includeCurrentDayToggle.checked;
+		const response = await PopupApi.collectMetrics(
+			sprintId,
+			includeCurrentDay,
+			getActiveProfile(),
+			userScope.scope,
+			userScope.selectedUser,
+		);
+
+		if (!response?.ok) {
+			PopupDom.trendContent.textContent = response?.error || "Erro ao carregar tendência.";
+			return;
+		}
+
+		const summary = response?.metrics?.trendSummary || null;
+		PopupDom.trendContent.innerHTML = PopupRender.renderTrendInsight(summary, response?.metrics?.selectedSprintLabel || "-");
+		persistUiStateIfNeeded();
+	} catch (error) {
+		PopupDom.trendContent.textContent = `Erro: ${error instanceof Error ? error.message : "Falha inesperada."}`;
 	}
 }
 
@@ -1926,7 +1990,9 @@ function bindEvents() {
 		if (getActiveProfile() === PROFILES.MANAGEMENT) {
 			runMetricsAction();
 			if (!PopupDom.changesView.classList.contains("hidden")) {
-				if (PopupState.currentListMode === "critical") {
+				if (PopupState.currentListMode === "trend") {
+					loadTrendView();
+				} else if (PopupState.currentListMode === "critical") {
 					loadCriticalPendingAnalyses();
 				} else if (String(PopupState.currentListMode || "").startsWith("metric:")) {
 					loadMetricItemsByBucket(String(PopupState.currentListMode).slice("metric:".length));
@@ -1994,6 +2060,18 @@ function bindEvents() {
 		if (!tile) return;
 		const metricBucket = String(tile.getAttribute("data-metric-bucket") || "").trim();
 		if (!metricBucket) return;
+		if (metricBucket === "recent") {
+			loadRecentChanges();
+			return;
+		}
+		if (metricBucket === "critical") {
+			loadCriticalPendingAnalyses();
+			return;
+		}
+		if (metricBucket === "trend") {
+			loadTrendView();
+			return;
+		}
 		loadMetricItemsByBucket(metricBucket);
 	});
 
@@ -2292,7 +2370,9 @@ async function init() {
 			await loadMetricsForCurrentSelection();
 
 			if (savedUiState?.view === "changes" || savedUiState?.view === "detail") {
-				if (savedUiState?.listMode === "critical") {
+				if (savedUiState?.listMode === "trend") {
+					await loadTrendView();
+				} else if (savedUiState?.listMode === "critical") {
 					await loadCriticalPendingAnalyses(savedUiState);
 				} else if (String(savedUiState?.listMode || "").startsWith("metric:")) {
 					const metricBucket = String(savedUiState.listMode).slice("metric:".length);

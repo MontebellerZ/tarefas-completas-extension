@@ -251,18 +251,25 @@ function getMappedTotalStateSet(statusSets) {
 
 function getItemsForMetricBucket(items, metricBucket, statusSets) {
 	const bucket = String(metricBucket || "").trim().toLowerCase();
+	const source = Array.isArray(items) ? items : [];
 	if (bucket === "started") {
 		const totalStates = getMappedTotalStateSet(statusSets);
-		return items.filter((item) => itemMatchesStateSet(item, totalStates));
+		return source.filter((item) => itemMatchesStateSet(item, totalStates));
 	}
 	if (bucket === "pending") {
-		return items.filter((item) => itemMatchesStateSet(item, statusSets.pendingStates));
+		return source.filter((item) => itemMatchesStateSet(item, statusSets.pendingStates));
 	}
 	if (bucket === "validating") {
-		return items.filter((item) => itemMatchesStateSet(item, statusSets.validatingStates));
+		return source.filter((item) => itemMatchesStateSet(item, statusSets.validatingStates));
 	}
 	if (bucket === "finished") {
-		return items.filter((item) => itemMatchesStateSet(item, statusSets.finishedStates));
+		return source.filter((item) => itemMatchesStateSet(item, statusSets.finishedStates));
+	}
+	if (bucket === "not-started") {
+		return source.filter((item) => Number(item?.completed || 0) <= 0);
+	}
+	if (bucket === "unassigned") {
+		return source.filter((item) => !hasAssignedUser(item));
 	}
 	throw new Error("Tipo de métrica inválido para listagem de itens.");
 }
@@ -292,6 +299,127 @@ function getAssignedUserDisplayName(assignedTo) {
 
 	const displayName = String(assignedTo?.displayName || assignedTo?.name || assignedTo?.uniqueName || "").trim();
 	return displayName || "Nao atribuido";
+}
+
+function hasAssignedUser(item) {
+	const assignedTo = item?.assignedTo;
+	if (!assignedTo) return false;
+	if (typeof assignedTo === "string") {
+		return Boolean(String(assignedTo || "").trim());
+	}
+	return Boolean(
+		String(assignedTo.displayName || assignedTo.name || assignedTo.uniqueName || assignedTo.id || "").trim(),
+	);
+}
+
+function getRemainingWorkForItem(item) {
+	const estimated = Number(item?.estimated || 0);
+	const completed = Number(item?.completed || 0);
+	if (!Number.isFinite(estimated) || estimated <= 0) return 0;
+	if (!Number.isFinite(completed) || completed <= 0) return Number(estimated.toFixed(4));
+	return Number(Math.max(estimated - completed, 0).toFixed(4));
+}
+
+function isWorkItemFromSprint(item, sprint) {
+	const itemIterationPath = String(item?.iterationPath || "").trim().toLowerCase();
+	const itemSprint = String(item?.sprint || "").trim().toLowerCase();
+	const sprintPath = String(sprint?.path || "").trim().toLowerCase();
+	const sprintLabel = String(sprint?.label || "").trim().toLowerCase();
+	if (itemIterationPath && sprintPath && itemIterationPath === sprintPath) return true;
+	if (itemSprint && sprintLabel && itemSprint === sprintLabel) return true;
+	return false;
+}
+
+function countRemainingWorkingDaysIncludingToday(sprint) {
+	const keys = Array.isArray(sprint?.workingDateKeys) ? sprint.workingDateKeys : [];
+	if (!keys.length) return 0;
+	const todayKey = toDateKey(new Date());
+	return keys.filter((key) => String(key || "") >= todayKey).length;
+}
+
+function getElapsedWorkingDaysForTrend(sprint) {
+	return Math.max(0, countElapsedWorkingDays(sprint, true));
+}
+
+function getForecastStatusByCapacityRatio(ratioPercent) {
+	const ratio = Number(ratioPercent);
+	if (!Number.isFinite(ratio)) {
+		return {
+			status: "off-track",
+			arrowDirection: "down-right",
+			feedbackText: "Com o ritmo atual, a equipe não deve alcançar o objetivo da sprint no prazo.",
+		};
+	}
+
+	if (ratio <= 80) {
+		return {
+			status: "on-track",
+			arrowDirection: "up-right",
+			feedbackText: "Com o ritmo atual, a equipe deve alcançar o objetivo da sprint dentro do prazo.",
+		};
+	}
+
+	if (ratio <= 100) {
+		return {
+			status: "at-risk",
+			arrowDirection: "right",
+			feedbackText: "Com o ritmo atual, a sprint está em risco e exige atenção para alcançar o objetivo.",
+		};
+	}
+
+	return {
+		status: "off-track",
+		arrowDirection: "down-right",
+		feedbackText: "Com o ritmo atual, a equipe não deve alcançar o objetivo da sprint no prazo.",
+	};
+}
+
+function buildTrendSeries(sprint, baselineRemaining, currentRemaining, burnPerWorkingDay) {
+	const keys = Array.isArray(sprint?.workingDateKeys) ? [...sprint.workingDateKeys].sort((left, right) => left.localeCompare(right)) : [];
+	if (!keys.length) {
+		return {
+			labels: [],
+			ideal: [],
+			remaining: [],
+		};
+	}
+
+	const todayKey = toDateKey(new Date());
+	let todayIndex = keys.findLastIndex((key) => key <= todayKey);
+	if (todayIndex < 0) todayIndex = 0;
+	if (todayIndex > keys.length - 1) todayIndex = keys.length - 1;
+
+	const safeBaseline = Math.max(0, Number(baselineRemaining || 0));
+	const safeCurrent = Math.max(0, Number(currentRemaining || 0));
+	const safeBurn = Math.max(0, Number(burnPerWorkingDay || 0));
+
+	const labels = [];
+	const ideal = [];
+	const remaining = [];
+	const lastIndex = Math.max(1, keys.length - 1);
+
+	for (let index = 0; index < keys.length; index += 1) {
+		const key = keys[index];
+		const [year, month, day] = String(key || "").split("-");
+		labels.push(year && month && day ? `${day}/${month}` : "-");
+
+		const idealValue = safeBaseline - (safeBaseline * index) / lastIndex;
+		ideal.push(Number(Math.max(idealValue, 0).toFixed(4)));
+
+		let remainingValue = safeCurrent;
+		if (index <= todayIndex) {
+			remainingValue = safeCurrent + safeBurn * (todayIndex - index);
+		} else {
+			remainingValue = safeCurrent - safeBurn * (index - todayIndex);
+		}
+		remaining.push(Number(Math.max(remainingValue, 0).toFixed(4)));
+	}
+
+	return {
+		labels,
+		ideal,
+		remaining,
+	};
 }
 
 async function fetchAllWorkItemRevisions(settings, workItemId, pageSize = 200) {
@@ -332,6 +460,11 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 	const finishedTasks = getItemsForMetricBucket(sprint.workedItems, "finished", statusSets).length;
 	const startedTasks = getItemsForMetricBucket(sprint.workedItems, "started", statusSets).length;
 	const { validatingStates } = statusSets;
+	const notStartedCount = sprint.workedItems.filter((item) => Number(item?.completed || 0) <= 0).length;
+	const remainingWorkTotal = Number(
+		sprint.workedItems.reduce((total, item) => total + getRemainingWorkForItem(item), 0).toFixed(4),
+	);
+	const unassignedCount = sprint.workedItems.filter((item) => !hasAssignedUser(item)).length;
 
 	if (dataset.profile === VIEW_PROFILES.TESTS) {
 		const releasedByDay = new Map();
@@ -416,11 +549,44 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 			hasCapacity: Boolean(sprint.hasCapacity !== false),
 			releasedPerDay,
 			finishedPerDay: releasedPerDay,
+			notStartedCount,
+			remainingWorkTotal,
+			unassignedCount,
 			selectedSprint: sprint.id,
 			selectedSprintLabel: sprint.label,
 			profile: dataset.profile,
 		};
 	}
+
+	const [recentItemsAll, criticalItemsAll] = await Promise.all([
+		listRecentChanges(options),
+		listCriticalPendingAnalyses(options),
+	]);
+	const recentChangesCount = (Array.isArray(recentItemsAll) ? recentItemsAll : []).filter((item) => isWorkItemFromSprint(item, sprint)).length;
+	const criticalPendingCount = (Array.isArray(criticalItemsAll) ? criticalItemsAll : []).filter((item) => isWorkItemFromSprint(item, sprint)).length;
+
+	const elapsedDaysForTrend = getElapsedWorkingDaysForTrend(sprint);
+	const avgDailyAllAnalysts = elapsedDaysForTrend > 0 ? Number((sumHours / elapsedDaysForTrend).toFixed(4)) : 0;
+	const remainingWorkingDays = countRemainingWorkingDaysIncludingToday(sprint);
+	const forecastCapacityTotal = Number((remainingWorkingDays * avgDailyAllAnalysts).toFixed(4));
+	const remainingCapacityRatioPct =
+		forecastCapacityTotal > 0
+			? Number(((remainingWorkTotal / forecastCapacityTotal) * 100).toFixed(4))
+			: remainingWorkTotal > 0
+				? Number.POSITIVE_INFINITY
+				: 0;
+	const trendStatus = getForecastStatusByCapacityRatio(remainingCapacityRatioPct);
+	const trendBaseline = Number(Math.max(remainingWorkTotal + Math.max(sumHours, 0), remainingWorkTotal).toFixed(4));
+	const trendSeries = buildTrendSeries(sprint, trendBaseline, remainingWorkTotal, avgDailyAllAnalysts);
+	const trendSummary = {
+		...trendStatus,
+		remainingCapacityRatioPct,
+		remainingWorkTotal,
+		forecastCapacityTotal,
+		remainingWorkingDays,
+		avgDailyAllAnalysts,
+		series: trendSeries,
+	};
 
 	const analystHours =
 		dataset.profile === VIEW_PROFILES.MANAGEMENT && dataset.targetUser?.isAllUsers
@@ -458,11 +624,17 @@ async function collectMetrics(sprintId, includeCurrentDay, options = {}) {
 		pendingTasks,
 		validatingTasks,
 		finishedTasks,
+		notStartedCount,
+		remainingWorkTotal,
+		recentChangesCount,
+		criticalPendingCount,
+		unassignedCount,
 		sumHours: Number(sumHours.toFixed(4)),
 		completedDays: consideredDays,
 		dailyAverage: Number(dailyAverage.toFixed(4)),
 		hasCapacity: Boolean(sprint.hasCapacity !== false),
 		analystHours,
+		trendSummary,
 		selectedSprint: sprint.id,
 		selectedSprintLabel: sprint.label,
 		profile: dataset.profile,
@@ -477,8 +649,27 @@ async function listSprintItemsByMetricBucket(sprintId, metricBucket, options = {
 		throw new Error("Sprint selecionada nao encontrada.");
 	}
 
+	const bucket = String(metricBucket || "").trim().toLowerCase();
+	if (bucket === "recent") {
+		const items = await listRecentChanges(options);
+		return (Array.isArray(items) ? items : [])
+			.filter((item) => isWorkItemFromSprint(item, sprint))
+			.sort((left, right) => String(right.changedDate || "").localeCompare(String(left.changedDate || "")));
+	}
+
+	if (bucket === "critical") {
+		const items = await listCriticalPendingAnalyses(options);
+		return (Array.isArray(items) ? items : [])
+			.filter((item) => isWorkItemFromSprint(item, sprint))
+			.sort((left, right) => String(right.changedDate || "").localeCompare(String(left.changedDate || "")));
+	}
+
+	if (bucket === "trend") {
+		return [];
+	}
+
 	const statusSets = getConfiguredStatusSets(dataset.settings, dataset.profile);
-	const filtered = getItemsForMetricBucket(sprint.workedItems, metricBucket, statusSets);
+	const filtered = getItemsForMetricBucket(sprint.workedItems, bucket, statusSets);
 
 	const sorted = filtered.sort((left, right) => Number(right?.id || 0) - Number(left?.id || 0));
 	if (dataset.profile !== VIEW_PROFILES.TESTS) {

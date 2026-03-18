@@ -70,6 +70,114 @@ function createMetricTile(title, value, valueClass, metricBucket = "") {
 	`;
 }
 
+function getTrendArrowSymbol(direction) {
+	if (direction === "up-right") return "↗";
+	if (direction === "right") return "→";
+	return "↘";
+}
+
+function createTrendTile(trendSummary) {
+	const status = String(trendSummary?.status || "off-track").trim().toLowerCase();
+	const direction = String(trendSummary?.arrowDirection || "down-right").trim().toLowerCase();
+	const arrowClass =
+		status === "on-track"
+			? "trend-arrow-green"
+			: status === "at-risk"
+				? "trend-arrow-yellow"
+				: "trend-arrow-red";
+	const symbol = getTrendArrowSymbol(direction);
+
+	return `
+		<div class="metric-tile metric-tile-clickable trend-metric-tile" data-metric-bucket="trend">
+			<div class="metric-title">Tendência</div>
+			<div class="trend-arrow ${arrowClass}" aria-label="Tendência da sprint">${symbol}</div>
+		</div>
+	`;
+}
+
+function formatTrendPointValues(values = []) {
+	return (Array.isArray(values) ? values : []).map((value) => {
+		const numeric = Number(value || 0);
+		if (!Number.isFinite(numeric) || numeric < 0) return 0;
+		return Number(numeric.toFixed(4));
+	});
+}
+
+function buildTrendPolyline(values, width, height, maxValue) {
+	const points = formatTrendPointValues(values);
+	if (!points.length) return "";
+	if (points.length === 1) {
+		const y = height - (maxValue > 0 ? (points[0] / maxValue) * height : 0);
+		return `0,${y.toFixed(2)} ${width},${y.toFixed(2)}`;
+	}
+
+	const step = width / Math.max(1, points.length - 1);
+	return points
+		.map((value, index) => {
+			const x = step * index;
+			const y = height - (maxValue > 0 ? (value / maxValue) * height : 0);
+			return `${x.toFixed(2)},${Math.max(0, Math.min(height, y)).toFixed(2)}`;
+		})
+		.join(" ");
+}
+
+function renderTrendInsight(summary = {}, sprintLabel = "") {
+	const status = String(summary?.status || "off-track").trim().toLowerCase();
+	const feedbackText = String(summary?.feedbackText || "Sem dados suficientes para analisar a tendência da sprint.").trim();
+	const labels = Array.isArray(summary?.series?.labels) ? summary.series.labels : [];
+	const idealValues = formatTrendPointValues(summary?.series?.ideal || []);
+	const remainingValues = formatTrendPointValues(summary?.series?.remaining || []);
+	const allValues = [...idealValues, ...remainingValues];
+	const maxValue = Math.max(1, ...allValues);
+	const chartWidth = 620;
+	const chartHeight = 220;
+	const idealPoints = buildTrendPolyline(idealValues, chartWidth, chartHeight, maxValue);
+	const remainingPoints = buildTrendPolyline(remainingValues, chartWidth, chartHeight, maxValue);
+	const firstLabel = labels[0] || "-";
+	const middleLabel = labels.length > 2 ? labels[Math.floor(labels.length / 2)] : labels[1] || labels[0] || "-";
+	const lastLabel = labels[labels.length - 1] || "-";
+	const feedbackClass =
+		status === "on-track"
+			? "trend-feedback-ok"
+			: status === "at-risk"
+				? "trend-feedback-risk"
+				: "trend-feedback-fail";
+
+	if (!labels.length || !idealValues.length || !remainingValues.length) {
+		return `
+			<div class="trend-view-wrap">
+				<div class="trend-view-title">Tendência - ${sprintLabel || "-"}</div>
+				<div class="trend-view-empty">Não foi possível montar o gráfico de tendência para esta sprint.</div>
+				<div class="trend-feedback ${feedbackClass}">${feedbackText}</div>
+			</div>
+		`;
+	}
+
+	return `
+		<div class="trend-view-wrap">
+			<div class="trend-view-title">Tendência - ${sprintLabel || "-"}</div>
+			<div class="trend-chart-wrap">
+				<svg class="trend-chart-svg" viewBox="0 0 ${chartWidth} ${chartHeight}" role="img" aria-label="Grafico de tendencia da sprint">
+					<line x1="0" y1="0" x2="0" y2="${chartHeight}" class="trend-axis" />
+					<line x1="0" y1="${chartHeight}" x2="${chartWidth}" y2="${chartHeight}" class="trend-axis" />
+					<polyline points="${idealPoints}" class="trend-line-ideal" />
+					<polyline points="${remainingPoints}" class="trend-line-remaining" />
+				</svg>
+				<div class="trend-legend">
+					<span class="trend-legend-item"><span class="trend-legend-dot trend-legend-dot-ideal"></span>Ideal</span>
+					<span class="trend-legend-item"><span class="trend-legend-dot trend-legend-dot-remaining"></span>Remaining</span>
+				</div>
+				<div class="trend-x-labels">
+					<span>${firstLabel}</span>
+					<span>${middleLabel}</span>
+					<span>${lastLabel}</span>
+				</div>
+			</div>
+			<div class="trend-feedback ${feedbackClass}">${feedbackText}</div>
+		</div>
+	`;
+}
+
 function createSkeletonTile(extraClass = "") {
 	return `
 		<div class="metric-tile metric-tile-skeleton ${extraClass}">
@@ -108,6 +216,7 @@ function renderMetrics(metrics) {
 	const finishedTasks = Number.isFinite(Number(metrics.finishedTasks)) ? Number(metrics.finishedTasks) : 0;
 	const consideredDays = Number.isFinite(Number(metrics.completedDays)) ? Number(metrics.completedDays) : 0;
 	const hoursLabel = formatHoursAndMinutes(metrics.sumHours);
+	const remainingWorkLabel = String(Math.max(0, Math.round(Number(metrics.remainingWorkTotal) || 0)));
 	const averageLabel = hasCapacity ? formatHoursAndMinutes(metrics.dailyAverage) : "Sem capacity";
 	const averageValueClass = hasCapacity
 		? "metric-value-gray-secondary metric-value-medium"
@@ -118,6 +227,11 @@ function renderMetrics(metrics) {
 	const shouldHideFeedbackForNoCapacity = !hasCapacity;
 	const shouldUseManagementAllAnalystsLayout =
 		profile === "management" && !String(PopupState?.managementSelectedUserId || "").trim();
+	const notStartedCount = Number.isFinite(Number(metrics.notStartedCount)) ? Number(metrics.notStartedCount) : 0;
+	const recentChangesCount = Number.isFinite(Number(metrics.recentChangesCount)) ? Number(metrics.recentChangesCount) : 0;
+	const criticalPendingCount = Number.isFinite(Number(metrics.criticalPendingCount)) ? Number(metrics.criticalPendingCount) : 0;
+	const unassignedCount = Number.isFinite(Number(metrics.unassignedCount)) ? Number(metrics.unassignedCount) : 0;
+	const trendSummary = metrics?.trendSummary || {};
 
 	if (profile === "tests") {
 		const pendingTasks = Number.isFinite(Number(metrics.pendingTasks)) ? Number(metrics.pendingTasks) : 0;
@@ -181,7 +295,6 @@ function renderMetrics(metrics) {
 		`;
 	}
 
-	const roundedHours = Math.round(Number(metrics.sumHours) || 0);
 	const analystHours = Array.isArray(metrics.analystHours)
 		? metrics.analystHours
 				.map((entry) => {
@@ -220,6 +333,7 @@ function renderMetrics(metrics) {
 		: '<div class="management-hours-empty">Sem horas registradas por analista nesta sprint.</div>';
 
 	if (shouldUseManagementAllAnalystsLayout) {
+		const roundedHours = Math.max(0, Math.round(Number(metrics.sumHours) || 0));
 		return `
 			<div class="metrics-wrap">
 				<div class="metrics-sprint-title">Tarefas - ${sprintLabel}</div>
@@ -235,6 +349,18 @@ function renderMetrics(metrics) {
 					</div>
 					<div class="metrics-management-primary-tile">
 						${createMetricTile("Finalizadas", String(finishedTasks), "metric-value-green", "finished")}
+					</div>
+					<div class="metrics-management-secondary-tile">
+						${createMetricTile("Não iniciadas", String(notStartedCount), "metric-value-dark", "not-started")}
+					</div>
+					<div class="metrics-management-secondary-tile">
+						${createMetricTile("Restante", remainingWorkLabel, "metric-value-gray-secondary")}
+					</div>
+					<div class="metrics-management-secondary-tile">
+						${createMetricTile("Sem dono", String(unassignedCount), "metric-value-dark", "unassigned")}
+					</div>
+					<div class="metrics-management-secondary-tile">
+						${createTrendTile(trendSummary)}
 					</div>
 					<div class="metrics-management-days-slot">
 						${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}
@@ -255,11 +381,15 @@ function renderMetrics(metrics) {
 	return `
 		<div class="metrics-wrap">
 			<div class="metrics-sprint-title">Tarefas - ${sprintLabel}</div>
-			<div class="metrics-unified-grid">
+			<div class="metrics-unified-grid metrics-unified-grid-analyst">
 				${createMetricTile("Iniciadas", String(startedTasks), "metric-value-lilac", "started")}
 				${createMetricTile("Andamento", String(pendingTasks), "metric-value-blue", "pending")}
 				${createMetricTile("Validando", String(validatingTasks), "metric-value-yellow", "validating")}
 				${createMetricTile("Finalizadas", String(finishedTasks), "metric-value-green", "finished")}
+				${createMetricTile("Não iniciadas", String(notStartedCount), "metric-value-dark", "not-started")}
+				${createMetricTile("Restante", remainingWorkLabel, "metric-value-gray-secondary")}
+				${createMetricTile("Recentes", String(recentChangesCount), "metric-value-pink", "recent")}
+				${createMetricTile("Críticas", String(criticalPendingCount), "metric-value-red", "critical")}
 				${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}
 				<div class="metrics-secondary-split-wrap">
 					${createMetricTile("Horas", hoursLabel, "metric-value-gray-secondary metric-value-medium")}
@@ -694,5 +824,6 @@ window.PopupRender = {
 	applySettingsToInputs,
 	buildItemCard,
 	renderMetrics,
+	renderTrendInsight,
 	formatMetrics,
 };
