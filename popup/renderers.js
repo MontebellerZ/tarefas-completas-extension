@@ -216,7 +216,6 @@ function renderMetrics(metrics) {
 	const finishedTasks = Number.isFinite(Number(metrics.finishedTasks)) ? Number(metrics.finishedTasks) : 0;
 	const consideredDays = Number.isFinite(Number(metrics.completedDays)) ? Number(metrics.completedDays) : 0;
 	const hoursLabel = formatHoursAndMinutes(metrics.sumHours);
-	const remainingWorkLabel = String(Math.max(0, Math.round(Number(metrics.remainingWorkTotal) || 0)));
 	const averageLabel = hasCapacity ? formatHoursAndMinutes(metrics.dailyAverage) : "Sem capacity";
 	const averageValueClass = hasCapacity
 		? "metric-value-gray-secondary metric-value-medium"
@@ -231,7 +230,6 @@ function renderMetrics(metrics) {
 	const recentChangesCount = Number.isFinite(Number(metrics.recentChangesCount)) ? Number(metrics.recentChangesCount) : 0;
 	const criticalPendingCount = Number.isFinite(Number(metrics.criticalPendingCount)) ? Number(metrics.criticalPendingCount) : 0;
 	const unassignedCount = Number.isFinite(Number(metrics.unassignedCount)) ? Number(metrics.unassignedCount) : 0;
-	const trendSummary = metrics?.trendSummary || {};
 
 	if (profile === "tests") {
 		const pendingTasks = Number.isFinite(Number(metrics.pendingTasks)) ? Number(metrics.pendingTasks) : 0;
@@ -354,18 +352,12 @@ function renderMetrics(metrics) {
 						${createMetricTile("Não iniciadas", String(notStartedCount), "metric-value-dark", "not-started")}
 					</div>
 					<div class="metrics-management-secondary-tile">
-						${createMetricTile("Restante", remainingWorkLabel, "metric-value-gray-secondary")}
-					</div>
-					<div class="metrics-management-secondary-tile">
 						${createMetricTile("Sem dono", String(unassignedCount), "metric-value-dark", "unassigned")}
 					</div>
 					<div class="metrics-management-secondary-tile">
-						${createTrendTile(trendSummary)}
-					</div>
-					<div class="metrics-management-days-slot">
 						${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}
 					</div>
-					<div class="metrics-management-hours-slot">
+					<div class="metrics-management-secondary-tile">
 						${createMetricTile("Horas", String(roundedHours), "metric-value-gray-secondary")}
 					</div>
 					<div class="management-hours-chart-wrap">
@@ -387,10 +379,9 @@ function renderMetrics(metrics) {
 				${createMetricTile("Validando", String(validatingTasks), "metric-value-yellow", "validating")}
 				${createMetricTile("Finalizadas", String(finishedTasks), "metric-value-green", "finished")}
 				${createMetricTile("Não iniciadas", String(notStartedCount), "metric-value-dark", "not-started")}
-				${createMetricTile("Restante", remainingWorkLabel, "metric-value-gray-secondary")}
+				${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}
 				${createMetricTile("Recentes", String(recentChangesCount), "metric-value-pink", "recent")}
 				${createMetricTile("Críticas", String(criticalPendingCount), "metric-value-red", "critical")}
-				${createMetricTile("Dias", String(consideredDays), "metric-value-gray-secondary")}
 				<div class="metrics-secondary-split-wrap">
 					${createMetricTile("Horas", hoursLabel, "metric-value-gray-secondary metric-value-medium")}
 					${createMetricTile("Média", averageLabel, averageValueClass)}
